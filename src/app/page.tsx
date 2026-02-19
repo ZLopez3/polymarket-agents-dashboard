@@ -62,9 +62,85 @@ export default async function Home() {
 
   const recentTrades = trades.slice(0, 20);
 
+  const agentRows = agents.map((agent: any) => {
+    const strat = strategyStats.find((s: any) => s.id === agent.strategy_id) || {};
+    const sTrades = trades.filter((t: any) => t.strategy_id === agent.strategy_id);
+    const notional = sTrades.reduce((acc: number, t: any) => acc + (Number(t.notional) || 0), 0);
+    const cash = Math.max((strat.base ?? 1000) - notional, 0);
+    const positions = new Set(sTrades.map((t: any) => t.market)).size;
+    return {
+      ...agent,
+      portfolio: strat.equity ?? 0,
+      pnl: strat.pnl ?? 0,
+      cash,
+      positions,
+      trades: sTrades.length,
+    };
+  });
+
+  const totalPositions = new Set(trades.map((t: any) => t.market)).size;
+
+
   return (
 
     <main className="min-h-screen bg-slate-950 text-white p-8 space-y-8">
+      <section className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
+          <div className="text-slate-400 text-sm">Agents</div>
+          <div className="text-2xl font-semibold">{agentRows.length}</div>
+        </div>
+        <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
+          <div className="text-slate-400 text-sm">Trades</div>
+          <div className="text-2xl font-semibold">{trades.length}</div>
+        </div>
+        <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
+          <div className="text-slate-400 text-sm">Positions</div>
+          <div className="text-2xl font-semibold">{totalPositions}</div>
+        </div>
+      </section>
+
+      <nav className="flex flex-wrap gap-3 text-sm text-slate-400">
+        {['Dashboard','Leaderboard','Live Trades','Open Positions','Agents vs Humans','Agent Markets','Agent Profiles'].map((item) => (
+          <span key={item} className="rounded-full border border-slate-800 px-3 py-1 hover:text-white">{item}</span>
+        ))}
+      </nav>
+
+      
+      <section>
+        <h1 className="text-2xl font-semibold">Agent Leaderboard</h1>
+        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-800">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-900">
+              <tr>
+                <th className="px-4 py-2 text-left">Agent</th>
+                <th className="px-4 py-2 text-left">Portfolio</th>
+                <th className="px-4 py-2 text-left">PnL</th>
+                <th className="px-4 py-2 text-left">Cash</th>
+                <th className="px-4 py-2 text-left">Positions</th>
+                <th className="px-4 py-2 text-left">Trades</th>
+              </tr>
+            </thead>
+            <tbody>
+              {agentRows.map((agent: any) => (
+                <tr key={agent.id} className="border-t border-slate-800">
+                  <td className="px-4 py-2">{agent.name}</td>
+                  <td className="px-4 py-2">{'$'}{Number(agent.portfolio).toFixed(2)}</td>
+                  <td className="px-4 py-2">{'$'}{Number(agent.pnl).toFixed(2)}</td>
+                  <td className="px-4 py-2">{'$'}{Number(agent.cash).toFixed(2)}</td>
+                  <td className="px-4 py-2">{agent.positions}</td>
+                  <td className="px-4 py-2">{agent.trades}</td>
+                </tr>
+              ))}
+              {agentRows.length === 0 && (
+                <tr>
+                  <td className="px-4 py-4 text-slate-400" colSpan={6}>No agents found.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section>
         <h1 className="text-3xl font-semibold">Strategy Overview</h1>
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
