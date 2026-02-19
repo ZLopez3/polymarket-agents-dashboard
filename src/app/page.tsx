@@ -12,7 +12,7 @@ async function fetchSummary() {
     supabase.from('agents').select('*').limit(10),
     supabase.from('trades').select('*').order('executed_at', { ascending: false }).limit(10),
     supabase.from('events').select('*').order('created_at', { ascending: false }).limit(10),
-    supabase.from('agent_heartbeats').select('*').order('created_at', { ascending: false }).limit(10),
+    supabase.from('agent_heartbeats').select('*').order('created_at', { ascending: false }).limit(50),
   ])
 
   return {
@@ -39,6 +39,14 @@ const statusColor = (status: string) => {
 
 export default async function Home() {
   const { strategies = [], agents = [], trades = [], events = [], heartbeats = [] } = await fetchSummary()
+
+  const latestHeartbeats = Object.values(
+    heartbeats.reduce((acc, hb) => {
+      if (!hb?.agent_id) return acc;
+      if (!acc[hb.agent_id]) acc[hb.agent_id] = hb;
+      return acc;
+    }, {} as Record<string, any>)
+  );
 
   return (
     <main className="min-h-screen bg-slate-950 text-white p-8 space-y-8">
@@ -81,9 +89,9 @@ export default async function Home() {
 
 
       <section>
-        <h1 className="text-2xl font-semibold"><span className="mr-2">💓</span>Agent Heartbeats</h1>
+        <h1 className="text-2xl font-semibold"><span className="mr-2">💓</span>Latest Heartbeats</h1>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {heartbeats.map((hb) => (
+          {latestHeartbeats.map((hb) => (
             <div key={hb.id} className="rounded-lg border border-slate-800 bg-slate-900 p-4">
               <div className="flex items-center gap-2">
                 <span className={`h-2 w-2 rounded-full ${statusColor(hb.status)}`} />
@@ -94,7 +102,7 @@ export default async function Home() {
               <p className="text-xs text-slate-500">{hb.created_at}</p>
             </div>
           ))}
-          {heartbeats.length === 0 && (
+          {latestHeartbeats.length === 0 && (
             <div className="text-slate-400">No heartbeats recorded yet.</div>
           )}
         </div>
