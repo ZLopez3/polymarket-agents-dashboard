@@ -25,7 +25,7 @@ async function fetchSummary() {
 }
 
 export default async function Home() {
-  const { strategies, agents, trades, events, heartbeats } = await fetchSummary()
+  const { strategies = [], agents = [], trades = [], events = [], heartbeats = [] } = await fetchSummary()
 
   return (
     <main className="min-h-screen bg-slate-950 text-white p-8 space-y-8">
