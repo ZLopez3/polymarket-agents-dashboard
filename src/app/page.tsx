@@ -24,6 +24,19 @@ async function fetchSummary() {
   }
 }
 
+const avatarMap: Record<string, string> = {
+  'BondLadder-Agent': '/avatars/bond-ladder.svg',
+  'AIContrarian-Agent': '/avatars/ai-contrarian.png',
+};
+
+const statusColor = (status: string) => {
+  const s = (status || '').toLowerCase();
+  if (s.includes('ok') || s.includes('alive') || s.includes('up')) return 'bg-emerald-500';
+  if (s.includes('warn')) return 'bg-amber-500';
+  if (s.includes('err') || s.includes('down')) return 'bg-rose-500';
+  return 'bg-slate-500';
+};
+
 export default async function Home() {
   const { strategies = [], agents = [], trades = [], events = [], heartbeats = [] } = await fetchSummary()
 
@@ -50,9 +63,14 @@ export default async function Home() {
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           {agents.map((agent) => (
             <div key={agent.id} className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-              <h3 className="text-lg font-medium">{agent.name}</h3>
-              <p className="text-sm text-slate-400">Strategy: {agent.strategy_id}</p>
-              <p className="text-sm text-slate-400">Status: {agent.status}</p>
+              <div className="flex items-center gap-3">
+                <img src={avatarMap[agent.name] || '/avatars/bond-ladder.svg'} alt={agent.name} className="h-10 w-10 rounded-full bg-slate-800 p-1" />
+                <div>
+                  <h3 className="text-lg font-medium">{agent.name}</h3>
+                  <p className="text-sm text-slate-400">Strategy: {agent.strategy_id}</p>
+                  <p className="text-sm text-slate-400">Status: {agent.status}</p>
+                </div>
+              </div>
             </div>
           ))}
           {agents.length === 0 && (
@@ -63,11 +81,14 @@ export default async function Home() {
 
 
       <section>
-        <h1 className="text-2xl font-semibold">Agent Heartbeats</h1>
+        <h1 className="text-2xl font-semibold"><span className="mr-2">💓</span>Agent Heartbeats</h1>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           {heartbeats.map((hb) => (
             <div key={hb.id} className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-              <h3 className="text-lg font-medium">Agent: {hb.agent_id}</h3>
+              <div className="flex items-center gap-2">
+                <span className={`h-2 w-2 rounded-full ${statusColor(hb.status)}`} />
+                <h3 className="text-lg font-medium">Agent: {hb.agent_id}</h3>
+              </div>
               <p className="text-sm text-slate-400">Status: {hb.status}</p>
               <p className="text-sm text-slate-400">Detail: {hb.detail}</p>
               <p className="text-xs text-slate-500">{hb.created_at}</p>
