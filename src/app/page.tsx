@@ -41,6 +41,13 @@ export default async function Home() {
   const { strategies = [], agents = [], trades = [], events = [], heartbeats = [] } = await fetchSummary()
 
   const latestHeartbeats = Object.values(
+    heartbeats.reduce((acc, hb) => {
+      if (!hb?.agent_id) return acc;
+      if (!acc[hb.agent_id]) acc[hb.agent_id] = hb;
+      return acc;
+    }, {} as Record<string, any>)
+  );
+
   const strategyMap = Object.fromEntries(strategies.map((s: any) => [s.id, s]));
 
   const strategyStats = strategies.map((s: any) => {
@@ -54,14 +61,9 @@ export default async function Home() {
   });
 
   const recentTrades = trades.slice(0, 20);
-    heartbeats.reduce((acc, hb) => {
-      if (!hb?.agent_id) return acc;
-      if (!acc[hb.agent_id]) acc[hb.agent_id] = hb;
-      return acc;
-    }, {} as Record<string, any>)
-  );
 
   return (
+
     <main className="min-h-screen bg-slate-950 text-white p-8 space-y-8">
       <section>
         <h1 className="text-3xl font-semibold">Strategy Overview</h1>
