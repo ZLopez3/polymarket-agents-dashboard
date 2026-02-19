@@ -80,11 +80,11 @@ export default async function Home() {
                 </div>
                 <div>
                   <div className="text-slate-500">PnL</div>
-                  <div className="font-semibold">${'{'}strategy.pnl.toFixed(2){'}'}</div>
+                  <div className="font-semibold">{'$'}{strategy.pnl.toFixed(2)}</div>
                 </div>
                 <div>
                   <div className="text-slate-500">Equity</div>
-                  <div className="font-semibold">${'{'}strategy.equity.toFixed(2){'}'}</div>
+                  <div className="font-semibold">{'$'}{strategy.equity.toFixed(2)}</div>
                 </div>
               </div>
             </div>
