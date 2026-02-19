@@ -120,7 +120,7 @@ export default async function Home() {
       <section>
         <h1 className="text-2xl font-semibold"><span className="mr-2">💓</span>Latest Heartbeats</h1>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {latestHeartbeats.map((hb) => (
+          {latestHeartbeats.map((hb: any) => (
             <div key={hb.id} className="rounded-lg border border-slate-800 bg-slate-900 p-4">
               <div className="flex items-center gap-2">
                 <span className={`h-2 w-2 rounded-full ${statusColor(hb.status)}`} />
