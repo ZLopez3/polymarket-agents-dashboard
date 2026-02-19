@@ -73,3 +73,12 @@ on conflict (name) do nothing;
 -- Enable read access for anon key (RLS must be enabled in Supabase UI)
 -- Apply these as policies in Supabase (Policies tab) or run as SQL if you manage policies via SQL.
 -- Example policy: CREATE POLICY "public_read" ON public.strategies FOR SELECT USING (true);
+
+-- Strategy settings table
+create table if not exists public.strategy_settings (
+  strategy_id uuid primary key references public.strategies(id) on delete cascade,
+  max_trade_notional numeric default 200,
+  max_trades_per_hour integer default 30,
+  max_daily_notional numeric default 2000,
+  max_daily_loss numeric default -100
+);

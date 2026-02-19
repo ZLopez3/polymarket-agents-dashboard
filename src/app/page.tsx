@@ -99,7 +99,8 @@ export default async function Home() {
         </div>
       </section>
 
-      <nav className="flex flex-wrap gap-3 text-sm text-slate-400">
+      <nav className="flex flex-wrap gap-3 text-sm text-slate-400 items-center">
+        <a href="/settings" className="ml-auto text-slate-300 hover:text-white" title="Settings">⚙️ Settings</a>
         {['Dashboard','Leaderboard','Live Trades','Open Positions','Agents vs Humans','Agent Markets','Agent Profiles'].map((item) => (
           <span key={item} className="rounded-full border border-slate-800 px-3 py-1 hover:text-white">{item}</span>
         ))}
