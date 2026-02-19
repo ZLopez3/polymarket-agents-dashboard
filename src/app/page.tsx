@@ -7,21 +7,25 @@ async function fetchSummary() {
     return { strategies: [], agents: [], trades: [] }
   }
 
-  const [strategies, agents, trades] = await Promise.all([
+  const [strategies, agents, trades, events, heartbeats] = await Promise.all([
     supabase.from('strategies').select('*').limit(10),
     supabase.from('agents').select('*').limit(10),
     supabase.from('trades').select('*').order('executed_at', { ascending: false }).limit(10),
+    supabase.from('events').select('*').order('created_at', { ascending: false }).limit(10),
+    supabase.from('agent_heartbeats').select('*').order('created_at', { ascending: false }).limit(10),
   ])
 
   return {
     strategies: strategies.data ?? [],
     agents: agents.data ?? [],
     trades: trades.data ?? [],
+    events: events.data ?? [],
+    heartbeats: heartbeats.data ?? [],
   }
 }
 
 export default async function Home() {
-  const { strategies, agents, trades } = await fetchSummary()
+  const { strategies, agents, trades, events, heartbeats } = await fetchSummary()
 
   return (
     <main className="min-h-screen bg-slate-950 text-white p-8 space-y-8">
@@ -54,6 +58,59 @@ export default async function Home() {
           {agents.length === 0 && (
             <div className="text-slate-400">No agents registered yet.</div>
           )}
+        </div>
+      </section>
+
+
+      <section>
+        <h1 className="text-2xl font-semibold">Agent Heartbeats</h1>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {heartbeats.map((hb) => (
+            <div key={hb.id} className="rounded-lg border border-slate-800 bg-slate-900 p-4">
+              <h3 className="text-lg font-medium">Agent: {hb.agent_id}</h3>
+              <p className="text-sm text-slate-400">Status: {hb.status}</p>
+              <p className="text-sm text-slate-400">Detail: {hb.detail}</p>
+              <p className="text-xs text-slate-500">{hb.created_at}</p>
+            </div>
+          ))}
+          {heartbeats.length === 0 && (
+            <div className="text-slate-400">No heartbeats recorded yet.</div>
+          )}
+        </div>
+      </section>
+
+      <section>
+        <h1 className="text-2xl font-semibold">Recent Events</h1>
+        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-800">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-900">
+              <tr>
+                <th className="px-4 py-2 text-left">Agent</th>
+                <th className="px-4 py-2 text-left">Type</th>
+                <th className="px-4 py-2 text-left">Severity</th>
+                <th className="px-4 py-2 text-left">Message</th>
+                <th className="px-4 py-2 text-left">Timestamp</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((event) => (
+                <tr key={event.id} className="border-t border-slate-800">
+                  <td className="px-4 py-2">{event.agent_id}</td>
+                  <td className="px-4 py-2">{event.event_type}</td>
+                  <td className="px-4 py-2">{event.severity}</td>
+                  <td className="px-4 py-2">{event.message}</td>
+                  <td className="px-4 py-2">{event.created_at}</td>
+                </tr>
+              ))}
+              {events.length === 0 && (
+                <tr>
+                  <td className="px-4 py-4 text-slate-400" colSpan={5}>
+                    No events recorded yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
 
