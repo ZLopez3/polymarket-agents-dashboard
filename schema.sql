@@ -5,6 +5,7 @@ create table if not exists public.strategies (
   status text not null default 'pending',
   owner text,
   bankroll_pct numeric,
+  paper_capital numeric default 1000,
   updated_at timestamptz default now()
 );
 
@@ -16,6 +17,37 @@ create table if not exists public.agents (
   status text not null default 'inactive',
   last_heartbeat timestamptz,
   config jsonb default '{}'::jsonb
+);
+
+-- Trades table
+create table if not exists public.trades (
+  id uuid primary key default gen_random_uuid(),
+  strategy_id uuid references public.strategies(id) on delete cascade,
+  agent_id uuid references public.agents(id) on delete set null,
+  market text,
+  side text,
+  notional numeric,
+  pnl numeric,
+  executed_at timestamptz default now()
+);
+
+-- Events table
+create table if not exists public.events (
+  id uuid primary key default gen_random_uuid(),
+  agent_id uuid references public.agents(id) on delete set null,
+  event_type text,
+  severity text,
+  message text,
+  created_at timestamptz default now()
+);
+
+-- Agent heartbeats table
+create table if not exists public.agent_heartbeats (
+  id uuid primary key default gen_random_uuid(),
+  agent_id uuid references public.agents(id) on delete cascade,
+  status text,
+  detail text,
+  created_at timestamptz default now()
 );
 
 -- Seed strategies
@@ -37,3 +69,7 @@ select 'AIContrarian-Agent', id, 'idle'
 from public.strategies
 where name = 'AI Contrarian'
 on conflict (name) do nothing;
+
+-- Enable read access for anon key (RLS must be enabled in Supabase UI)
+-- Apply these as policies in Supabase (Policies tab) or run as SQL if you manage policies via SQL.
+-- Example policy: CREATE POLICY "public_read" ON public.strategies FOR SELECT USING (true);

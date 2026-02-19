@@ -10,7 +10,7 @@ async function fetchSummary() {
   const [strategies, agents, trades, events, heartbeats] = await Promise.all([
     supabase.from('strategies').select('*').limit(10),
     supabase.from('agents').select('*').limit(10),
-    supabase.from('trades').select('*').order('executed_at', { ascending: false }).limit(10),
+    supabase.from('trades').select('*').order('executed_at', { ascending: false }).limit(500),
     supabase.from('events').select('*').order('created_at', { ascending: false }).limit(10),
     supabase.from('agent_heartbeats').select('*').order('created_at', { ascending: false }).limit(50),
   ])
@@ -41,6 +41,19 @@ export default async function Home() {
   const { strategies = [], agents = [], trades = [], events = [], heartbeats = [] } = await fetchSummary()
 
   const latestHeartbeats = Object.values(
+  const strategyMap = Object.fromEntries(strategies.map((s: any) => [s.id, s]));
+
+  const strategyStats = strategies.map((s: any) => {
+    const sTrades = trades.filter((t: any) => t.strategy_id === s.id);
+    const pnl = sTrades.reduce((acc: number, t: any) => acc + (Number(t.pnl) || 0), 0);
+    const notional = sTrades.reduce((acc: number, t: any) => acc + (Number(t.notional) || 0), 0);
+    const tradeCount = sTrades.length;
+    const base = Number(s.paper_capital ?? 1000);
+    const equity = base + pnl;
+    return { ...s, pnl, notional, tradeCount, equity, base };
+  });
+
+  const recentTrades = trades.slice(0, 20);
     heartbeats.reduce((acc, hb) => {
       if (!hb?.agent_id) return acc;
       if (!acc[hb.agent_id]) acc[hb.agent_id] = hb;
@@ -53,11 +66,25 @@ export default async function Home() {
       <section>
         <h1 className="text-3xl font-semibold">Strategy Overview</h1>
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {strategies.map((strategy) => (
+          {strategyStats.map((strategy: any) => (
             <div key={strategy.id} className="rounded-lg border border-slate-800 bg-slate-900 p-4">
               <h2 className="text-xl font-medium">{strategy.name}</h2>
               <p className="text-sm text-slate-400">Status: {strategy.status}</p>
               <p className="text-sm text-slate-400">Owner: {strategy.owner}</p>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-300">
+                <div>
+                  <div className="text-slate-500">Trades</div>
+                  <div className="font-semibold">{strategy.tradeCount}</div>
+                </div>
+                <div>
+                  <div className="text-slate-500">PnL</div>
+                  <div className="font-semibold">${'{'}strategy.pnl.toFixed(2){'}'}</div>
+                </div>
+                <div>
+                  <div className="text-slate-500">Equity</div>
+                  <div className="font-semibold">${'{'}strategy.equity.toFixed(2){'}'}</div>
+                </div>
+              </div>
             </div>
           ))}
           {strategies.length === 0 && (
@@ -158,9 +185,9 @@ export default async function Home() {
               </tr>
             </thead>
             <tbody>
-              {trades.map((trade) => (
+              {recentTrades.map((trade: any) => (
                 <tr key={trade.id} className="border-t border-slate-800">
-                  <td className="px-4 py-2">{trade.strategy_id}</td>
+                  <td className="px-4 py-2">{strategyMap[trade.strategy_id]?.name || trade.strategy_id}</td>
                   <td className="px-4 py-2">{trade.market}</td>
                   <td className="px-4 py-2">{trade.side}</td>
                   <td className="px-4 py-2">{trade.notional}</td>
@@ -168,7 +195,7 @@ export default async function Home() {
                   <td className="px-4 py-2">{trade.executed_at}</td>
                 </tr>
               ))}
-              {trades.length === 0 && (
+              {recentTrades.length === 0 && (
                 <tr>
                   <td className="px-4 py-4 text-slate-400" colSpan={6}>
                     No trades recorded yet.
