@@ -1,5 +1,7 @@
 import { supabase } from '@/lib/supabaseClient'
 
+export const dynamic = 'force-dynamic'
+
 async function fetchSummary() {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
     return { strategies: [], agents: [], trades: [] }
