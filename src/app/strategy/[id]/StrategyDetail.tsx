@@ -88,6 +88,11 @@ export default function StrategyDetail({ strategy, trades }: { strategy: any; tr
   const path = buildPath(equityPoints, 740, 210)
   const bars = buildHistogram(filtered, 800, 160)
 
+  const minEquity = equityPoints.length ? Math.min(...equityPoints.map(p => p.equity)) : base;
+  const maxEquity = equityPoints.length ? Math.max(...equityPoints.map(p => p.equity)) : base;
+  const startTs = equityPoints.length ? new Date(equityPoints[0].t).toLocaleString() : '—';
+  const endTs = equityPoints.length ? new Date(equityPoints[equityPoints.length - 1].t).toLocaleString() : '—';
+
   return (
     <main className="min-h-screen bg-slate-950 text-white p-8 space-y-8">
       <div className="mb-4">
@@ -121,10 +126,10 @@ export default function StrategyDetail({ strategy, trades }: { strategy: any; tr
           <svg width="100%" viewBox="0 0 800 260" className="text-emerald-400">
             <line x1="40" y1="10" x2="40" y2="220" stroke="#334155" strokeWidth="1" />
             <line x1="40" y1="220" x2="780" y2="220" stroke="#334155" strokeWidth="1" />
-            <text x="10" y="20" fontSize="10" fill="#94A3B8">Max</text>
-            <text x="10" y="220" fontSize="10" fill="#94A3B8">Min</text>
-            <text x="40" y="250" fontSize="10" fill="#94A3B8">Start</text>
-            <text x="740" y="250" fontSize="10" fill="#94A3B8">End</text>
+            <text x="10" y="20" fontSize="10" fill="#94A3B8">{formatMoney(maxEquity)}</text>
+            <text x="10" y="220" fontSize="10" fill="#94A3B8">{formatMoney(minEquity)}</text>
+            <text x="40" y="250" fontSize="10" fill="#94A3B8">{startTs}</text>
+            <text x="560" y="250" fontSize="10" fill="#94A3B8">{endTs}</text>
             <g transform="translate(40,10)">
             <path d={path} fill="none" stroke="currentColor" strokeWidth="2" />
                         <path d={`${path} L 740 210 L 0 210 Z`} fill="currentColor" opacity="0.1" />
@@ -185,7 +190,7 @@ export default function StrategyDetail({ strategy, trades }: { strategy: any; tr
                   <td className="px-4 py-2">{t.side}</td>
                   <td className="px-4 py-2">{formatMoney(Number(t.notional || 0))}</td>
                   <td className="px-4 py-2">{formatMoney(Number(t.pnl || 0))}</td>
-                  <td className="px-4 py-2">{t.is_resolved ? '✅' : '⏳'}</td>
+                  <td className="px-4 py-2"><span className={`inline-block h-3 w-3 rounded-full ${t.is_resolved ? (t.side === 'YES' ? 'bg-emerald-500' : 'bg-rose-500') : 'bg-slate-500'}`} title={t.is_resolved ? t.side : 'Unresolved'} /></td>
                   <td className="px-4 py-2">{formatDate(t.executed_at)}</td>
                 </tr>
               ))}
