@@ -209,7 +209,7 @@ export default async function Home() {
                   <span className="text-slate-500">No heartbeat yet</span>
                 )}
               </div>
-            </a>
+            </div>
           ))}
           {agents.length === 0 && (
             <div className="text-slate-400">No agents registered yet.</div>
