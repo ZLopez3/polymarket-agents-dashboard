@@ -1,5 +1,5 @@
 import { revalidatePath } from 'next/cache'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { supabaseAdmin } from '../../lib/supabaseAdmin'
 
 const defaults = {
   max_trade_notional: 200,
@@ -70,7 +70,7 @@ export default async function SettingsPage() {
         {Object.entries(groupedByOwner).map(([group, groupStrategies]) => (
           <div key={group} className="space-y-4">
             <h2 className="text-xl font-semibold">{group}</h2>
-            {groupStrategies.map((strategy: any) => {
+            {(groupStrategies as any[]).map((strategy: any) => {
               const s = settingsMap[strategy.id] || {}
               return (
                 <form
