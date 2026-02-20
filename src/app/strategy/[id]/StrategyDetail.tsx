@@ -190,7 +190,7 @@ export default function StrategyDetail({ strategy, trades }: { strategy: any; tr
                   <td className="px-4 py-2">{t.side}</td>
                   <td className="px-4 py-2">{formatMoney(Number(t.notional || 0))}</td>
                   <td className="px-4 py-2">{formatMoney(Number(t.pnl || 0))}</td>
-                  <td className="px-4 py-2"><span className={`inline-block h-3 w-3 rounded-full ${t.is_resolved ? (t.side === 'YES' ? 'bg-emerald-500' : 'bg-rose-500') : 'bg-slate-500'}`} title={t.is_resolved ? t.side : 'Unresolved'} /></td>
+                  <td className="px-4 py-2"><span className={`inline-block h-3 w-3 rounded-full ${t.is_resolved ? (t.side === 'YES' ? 'bg-emerald-500' : 'bg-rose-500') : (t.closes_at && new Date(t.closes_at).getTime() < Date.now() ? 'bg-amber-500' : 'bg-slate-500')}`} title={t.is_resolved ? t.side : (t.closes_at && new Date(t.closes_at).getTime() < Date.now() ? 'Past close, awaiting resolution' : 'Unresolved')} /></td>
                   <td className="px-4 py-2">{formatDate(t.executed_at)}</td>
                 </tr>
               ))}

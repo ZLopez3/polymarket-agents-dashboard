@@ -279,7 +279,7 @@ export default async function Home() {
                   <td className="px-4 py-2">{trade.side}</td>
                   <td className="px-4 py-2">{trade.notional}</td>
                   <td className="px-4 py-2">{formatDate(trade.closes_at)}</td>
-                  <td className="px-4 py-2"><span className={`inline-block h-3 w-3 rounded-full ${trade.is_resolved ? (trade.side === 'YES' ? 'bg-emerald-500' : 'bg-rose-500') : 'bg-slate-500'}`} title={trade.is_resolved ? trade.side : 'Unresolved'} /></td>
+                  <td className="px-4 py-2"><span className={`inline-block h-3 w-3 rounded-full ${trade.is_resolved ? (trade.side === 'YES' ? 'bg-emerald-500' : 'bg-rose-500') : (trade.closes_at && new Date(trade.closes_at).getTime() < Date.now() ? 'bg-amber-500' : 'bg-slate-500')}`} title={trade.is_resolved ? trade.side : (trade.closes_at && new Date(trade.closes_at).getTime() < Date.now() ? 'Past close, awaiting resolution' : 'Unresolved')} /></td>
                   <td className="px-4 py-2">{formatTs(trade.executed_at)}</td>
                 </tr>
               ))}
