@@ -49,6 +49,11 @@ export default async function Home() {
 
   const strategyMap = Object.fromEntries(strategies.map((s: any) => [s.id, s]));
   const agentNameMap = Object.fromEntries(agents.map((a: any) => [a.id, a.name]));
+  const descriptionMap: Record<string, string> = {
+    'BondLadder-Agent': 'Harvests high-certainty markets for steady yield.',
+    'AIContrarian-Agent': 'Fades crowd consensus using AI divergence signals.',
+    'Audi': 'Audits strategy drawdowns and auto-tunes parameters.'
+  };
 
   const strategyStats = strategies.map((s: any) => {
     const sTrades = trades.filter((t: any) => t.strategy_id === s.id);
@@ -182,12 +187,13 @@ export default async function Home() {
                 <img src={avatarMap[agent.name] || '/avatars/bond-ladder.svg'} alt={agent.name} className="h-10 w-10 rounded-full bg-slate-800 p-1" />
                 <div>
                   <h3 className="text-lg font-medium">{agent.name}</h3>
-                  <p className="text-sm text-slate-400">Strategy: {agent.strategy_id ?? '—'}</p>
-                  <p className="text-sm text-slate-400">Status: {agent.status}</p>
+                  {agent.name !== 'Audi' && (
+                    <p className="text-sm text-slate-400">Strategy: {agent.strategy_id ?? '—'}</p>
+                  )}
+                  <p className="text-sm text-slate-400">{descriptionMap[agent.name] || 'Agent running.'}</p>
                   {latestHeartbeatMap[agent.id] ? (
                     <div className="mt-1 flex items-center gap-2 text-xs text-slate-400">
                       <span className={`h-2 w-2 rounded-full ${statusColor(latestHeartbeatMap[agent.id].status)}`} />
-                      <span>{latestHeartbeatMap[agent.id].detail || 'heartbeat'}</span>
                       <span className="text-slate-500">{new Date(latestHeartbeatMap[agent.id].created_at).toLocaleTimeString()}</span>
                     </div>
                   ) : (
