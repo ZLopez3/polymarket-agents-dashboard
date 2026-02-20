@@ -150,6 +150,7 @@ export default async function Home() {
               <h2 className="text-xl font-medium">{strategy.name}</h2>
               <p className="text-sm text-slate-400">Status: {strategy.status}</p>
               <p className="text-sm text-slate-400">Owner: {strategy.owner}</p>
+              <p className="text-xs text-slate-500">Last tuned: {strategy.last_tuned_at ? new Date(strategy.last_tuned_at).toLocaleString() : '—'}</p>
               <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-300">
                 <div>
                   <div className="text-slate-500">Trades</div>
