@@ -159,7 +159,7 @@ export default async function Home() {
         <h1 className="text-3xl font-semibold">Strategy Overview</h1>
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {strategyStats.map((strategy: any) => (
-            <div key={strategy.id} className="rounded-lg border border-slate-800 bg-slate-900 p-4">
+            <a href={`/strategy/${strategy.id}`} className="block rounded-lg border border-slate-800 bg-slate-900 p-4 hover:border-slate-600">
               <h2 className="text-xl font-medium">{strategy.name}</h2>
               <p className="text-sm text-slate-400">Status: {strategy.status}</p>
               <p className="text-sm text-slate-400">Owner: {strategy.owner}</p>
@@ -178,7 +178,7 @@ export default async function Home() {
                   <div className="font-semibold">{'$'}{strategy.equity.toFixed(2)}</div>
                 </div>
               </div>
-            </div>
+            </a>
           ))}
           {strategies.length === 0 && (
             <div className="text-slate-400">No strategies found. Populate Supabase to see live data.</div>
@@ -209,7 +209,7 @@ export default async function Home() {
                   <span className="text-slate-500">No heartbeat yet</span>
                 )}
               </div>
-            </div>
+            </a>
           ))}
           {agents.length === 0 && (
             <div className="text-slate-400">No agents registered yet.</div>
