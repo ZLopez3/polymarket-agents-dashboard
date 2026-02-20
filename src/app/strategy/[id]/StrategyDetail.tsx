@@ -51,12 +51,13 @@ function buildHistogram(trades: any[], width: number, height: number) {
   if (!trades.length) return []
   const maxAbs = Math.max(...trades.map((t) => Math.abs(Number(t.pnl) || 0)), 1)
   const barWidth = width / trades.length
+  const baseline = height / 2
   return trades.map((t, idx) => {
     const pnl = Number(t.pnl) || 0
-    const barHeight = Math.min(height, (Math.abs(pnl) / maxAbs) * height)
+    const barHeight = Math.min(baseline, (Math.abs(pnl) / maxAbs) * baseline)
     return {
       x: idx * barWidth,
-      y: pnl >= 0 ? height - barHeight : height / 2,
+      y: pnl >= 0 ? baseline - barHeight : baseline,
       height: barHeight,
       width: barWidth - 2,
       positive: pnl >= 0,
@@ -84,17 +85,19 @@ export default function StrategyDetail({ strategy, trades }: { strategy: any; tr
   const equityPoints = computeEquity(filtered, base)
   const totalPnl = equityPoints.length ? equityPoints[equityPoints.length - 1].equity - base : 0
 
-  const path = buildPath(equityPoints, 800, 240)
+  const path = buildPath(equityPoints, 740, 210)
   const bars = buildHistogram(filtered, 800, 160)
 
   return (
     <main className="min-h-screen bg-slate-950 text-white p-8 space-y-8">
+      <div className="mb-4">
+        <a href="/" className="text-slate-300 hover:text-white">← Back</a>
+      </div>
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-semibold">{strategy.name}</h1>
           <p className="text-slate-400">Owner: {strategy.owner}</p>
         </div>
-        <a href="/" className="text-slate-300 hover:text-white">← Back</a>
       </header>
 
       <section className="flex gap-3 flex-wrap">
@@ -115,9 +118,17 @@ export default function StrategyDetail({ strategy, trades }: { strategy: any; tr
           <div className="text-slate-400 text-sm">PnL: {formatMoney(totalPnl)}</div>
         </div>
         <div className="mt-4">
-          <svg width="100%" viewBox="0 0 800 240" className="text-emerald-400">
+          <svg width="100%" viewBox="0 0 800 260" className="text-emerald-400">
+            <line x1="40" y1="10" x2="40" y2="220" stroke="#334155" strokeWidth="1" />
+            <line x1="40" y1="220" x2="780" y2="220" stroke="#334155" strokeWidth="1" />
+            <text x="10" y="20" fontSize="10" fill="#94A3B8">Max</text>
+            <text x="10" y="220" fontSize="10" fill="#94A3B8">Min</text>
+            <text x="40" y="250" fontSize="10" fill="#94A3B8">Start</text>
+            <text x="740" y="250" fontSize="10" fill="#94A3B8">End</text>
+            <g transform="translate(40,10)">
             <path d={path} fill="none" stroke="currentColor" strokeWidth="2" />
-            <path d={`${path} L 800 240 L 0 240 Z`} fill="currentColor" opacity="0.1" />
+                        <path d={`${path} L 740 210 L 0 210 Z`} fill="currentColor" opacity="0.1" />
+          </g>
           </svg>
         </div>
       </section>
