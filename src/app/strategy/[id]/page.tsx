@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 async function fetchJson(url: string, headers: Record<string, string>) {
-  const res = await fetch(url, { headers })
+  const res = await fetch(url, { headers, cache: 'no-store' })
   if (!res.ok) return []
   return res.json()
 }
