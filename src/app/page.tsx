@@ -48,6 +48,7 @@ export default async function Home() {
   }, {} as Record<string, any>);
 
   const strategyMap = Object.fromEntries(strategies.map((s: any) => [s.id, s]));
+  const agentNameMap = Object.fromEntries(agents.map((a: any) => [a.id, a.name]));
 
   const strategyStats = strategies.map((s: any) => {
     const sTrades = trades.filter((t: any) => t.strategy_id === s.id);
@@ -133,7 +134,7 @@ export default async function Home() {
               ))}
               {agentRows.length === 0 && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={8}>No agents found.</td>
+                  <td className="px-4 py-4 text-slate-400" colSpan={7}>No agents found.</td>
                 </tr>
               )}
             </tbody>
@@ -222,7 +223,7 @@ export default async function Home() {
             <tbody>
               {events.map((event) => (
                 <tr key={event.id} className="border-t border-slate-800">
-                  <td className="px-4 py-2">{event.agent_id}</td>
+                  <td className="px-4 py-2">{agentNameMap[event.agent_id] || (event.agent_id ? event.agent_id : 'System')}</td>
                   <td className="px-4 py-2">{event.event_type}</td>
                   <td className="px-4 py-2">{event.severity}</td>
                   <td className="px-4 py-2">{event.message}</td>
@@ -251,7 +252,6 @@ export default async function Home() {
                 <th className="px-4 py-2 text-left">Market</th>
                 <th className="px-4 py-2 text-left">Side</th>
                 <th className="px-4 py-2 text-left">Notional</th>
-                <th className="px-4 py-2 text-left">PnL</th>
                 <th className="px-4 py-2 text-left">Resolves</th>
                 <th className="px-4 py-2 text-left">Resolved</th>
                 <th className="px-4 py-2 text-left">Timestamp</th>
@@ -264,7 +264,6 @@ export default async function Home() {
                   <td className="px-4 py-2">{trade.market}</td>
                   <td className="px-4 py-2">{trade.side}</td>
                   <td className="px-4 py-2">{trade.notional}</td>
-                  <td className="px-4 py-2">{trade.pnl}</td>
                   <td className="px-4 py-2">{trade.closes_at ? new Date(trade.closes_at).toLocaleDateString() : '—'}</td>
                   <td className="px-4 py-2">{trade.is_resolved ? '✅' : '⏳'}</td>
                   <td className="px-4 py-2">{trade.executed_at}</td>
@@ -272,7 +271,7 @@ export default async function Home() {
               ))}
               {recentTrades.length === 0 && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={8}>
+                  <td className="px-4 py-4 text-slate-400" colSpan={7}>
                     No trades recorded yet.
                   </td>
                 </tr>
