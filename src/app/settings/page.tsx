@@ -19,6 +19,10 @@ async function updateSettings(formData: FormData) {
   const max_trades_per_hour = Number(formData.get('max_trades_per_hour') || defaults.max_trades_per_hour)
   const max_daily_notional = Number(formData.get('max_daily_notional') || defaults.max_daily_notional)
   const max_daily_loss = Number(formData.get('max_daily_loss') || defaults.max_daily_loss)
+  const divergence_threshold = Number(formData.get('divergence_threshold') || 20)
+  const certainty_threshold = Number(formData.get('certainty_threshold') || 0.95)
+  const liquidity_floor = Number(formData.get('liquidity_floor') || 0.5)
+  const order_size_multiplier = Number(formData.get('order_size_multiplier') || 1.0)
 
   if (!strategy_id) return
 
@@ -28,6 +32,10 @@ async function updateSettings(formData: FormData) {
     max_trades_per_hour,
     max_daily_notional,
     max_daily_loss,
+    divergence_threshold,
+    certainty_threshold,
+    liquidity_floor,
+    order_size_multiplier,
   })
 
   await supabaseAdmin.from('strategies').update({ paper_capital }).eq('id', strategy_id)
@@ -123,6 +131,43 @@ export default async function SettingsPage() {
                   <input
                     name="max_daily_loss"
                     defaultValue={s.max_daily_loss ?? defaults.max_daily_loss}
+                    className="mt-1 w-full rounded bg-slate-800 px-3 py-2"
+                  />
+                </label>
+              </div>
+
+
+              <div className="text-sm text-slate-300 font-medium">Tuning Settings</div>
+              <div className="grid md:grid-cols-3 gap-4">
+                <label className="text-sm">
+                  <div className="text-slate-400">Divergence Threshold</div>
+                  <input
+                    name="divergence_threshold"
+                    defaultValue={s.divergence_threshold ?? 20}
+                    className="mt-1 w-full rounded bg-slate-800 px-3 py-2"
+                  />
+                </label>
+                <label className="text-sm">
+                  <div className="text-slate-400">Certainty Threshold</div>
+                  <input
+                    name="certainty_threshold"
+                    defaultValue={s.certainty_threshold ?? 0.95}
+                    className="mt-1 w-full rounded bg-slate-800 px-3 py-2"
+                  />
+                </label>
+                <label className="text-sm">
+                  <div className="text-slate-400">Liquidity Floor (M USD)</div>
+                  <input
+                    name="liquidity_floor"
+                    defaultValue={s.liquidity_floor ?? 0.5}
+                    className="mt-1 w-full rounded bg-slate-800 px-3 py-2"
+                  />
+                </label>
+                <label className="text-sm">
+                  <div className="text-slate-400">Order Size Multiplier</div>
+                  <input
+                    name="order_size_multiplier"
+                    defaultValue={s.order_size_multiplier ?? 1.0}
                     className="mt-1 w-full rounded bg-slate-800 px-3 py-2"
                   />
                 </label>

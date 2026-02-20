@@ -80,5 +80,10 @@ create table if not exists public.strategy_settings (
   max_trade_notional numeric default 200,
   max_trades_per_hour integer default 30,
   max_daily_notional numeric default 2000,
-  max_daily_loss numeric default -100
+  max_daily_loss numeric default -100,
+  divergence_threshold numeric default 20,
+  certainty_threshold numeric default 0.95,
+  liquidity_floor numeric default 0.5,
+  order_size_multiplier numeric default 1.0,
+  last_tuned_at timestamptz
 );
