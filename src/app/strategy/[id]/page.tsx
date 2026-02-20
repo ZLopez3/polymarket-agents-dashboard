@@ -1,39 +1,63 @@
-export const dynamic = 'force-dynamic'
+'use client'
 
-async function fetchJson(url: string, headers: Record<string, string>) {
-  const res = await fetch(url, { headers, cache: 'no-store' })
-  if (!res.ok) return []
-  return res.json()
-}
+import { useEffect, useState } from 'react'
+import StrategyDetail from './StrategyDetail'
 
-export default async function StrategyPage({ params }: { params: { id: string } }) {
+export default function StrategyPage({ params }: { params: { id: string } }) {
   const strategyId = params.id
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const [strategy, setStrategy] = useState<any>(null)
+  const [trades, setTrades] = useState<any[]>([])
+  const [error, setError] = useState<string | null>(null)
 
-  if (!url || !anon) {
+  useEffect(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (!url || !anon) {
+      setError('Missing Supabase env (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)')
+      return
+    }
+
+    const headers = { apikey: anon, Authorization: `Bearer ${anon}` }
+    const id = encodeURIComponent(strategyId)
+
+    async function load() {
+      try {
+        const sRes = await fetch(`${url}/rest/v1/strategies?id=eq.${id}`, { headers })
+        const sData = await sRes.json()
+        const tRes = await fetch(`${url}/rest/v1/trades?strategy_id=eq.${id}&order=executed_at.asc`, { headers })
+        const tData = await tRes.json()
+
+        if (!Array.isArray(sData) || !sData.length) {
+          setError('Strategy not found')
+          return
+        }
+
+        setStrategy(sData[0])
+        setTrades(Array.isArray(tData) ? tData : [])
+      } catch (err: any) {
+        setError(err?.message || 'Failed to load strategy')
+      }
+    }
+
+    load()
+  }, [strategyId])
+
+  if (error) {
     return (
       <main className="min-h-screen bg-slate-950 text-white p-8">
-        <h1 className="text-2xl font-semibold">Missing Supabase env</h1>
-        <p className="text-slate-400 mt-2">Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel.</p>
+        <h1 className="text-2xl font-semibold">Strategy not found</h1>
+        <p className="text-slate-400 mt-2">{error}</p>
       </main>
     )
   }
-
-  const headers = { apikey: anon, Authorization: `Bearer ${anon}` }
-  const id = encodeURIComponent(strategyId)
-  const strategies = await fetchJson(`${url}/rest/v1/strategies?id=eq.${id}`, headers)
-  const strategy = strategies?.[0]
-  const trades = await fetchJson(`${url}/rest/v1/trades?strategy_id=eq.${id}&order=executed_at.asc`, headers)
 
   if (!strategy) {
     return (
       <main className="min-h-screen bg-slate-950 text-white p-8">
-        <h1 className="text-2xl font-semibold">Strategy not found</h1>
+        <h1 className="text-2xl font-semibold">Loading...</h1>
       </main>
     )
   }
 
-  const StrategyDetail = (await import('./StrategyDetail')).default
-  return <StrategyDetail strategy={strategy} trades={trades || []} />
+  return <StrategyDetail strategy={strategy} trades={trades} />
 }
