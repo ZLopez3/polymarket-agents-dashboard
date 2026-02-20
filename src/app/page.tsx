@@ -66,7 +66,7 @@ export default async function Home() {
     const strat = strategyStats.find((s: any) => s.id === agent.strategy_id) || {};
     const sTrades = trades.filter((t: any) => t.strategy_id === agent.strategy_id);
     const notional = sTrades.reduce((acc: number, t: any) => acc + (Number(t.notional) || 0), 0);
-    const cash = Math.max((strat.base ?? 1000) - notional, 0);
+    const cash = Math.max((strat.base ?? 1000) - notional + (strat.pnl ?? 0), 0);
     const positions = new Set(sTrades.map((t: any) => t.market)).size;
     return {
       ...agent,
