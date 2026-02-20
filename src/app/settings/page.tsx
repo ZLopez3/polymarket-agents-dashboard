@@ -1,5 +1,8 @@
+import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
+
 import { supabaseAdmin } from '../../lib/supabaseAdmin'
+import type { Strategy, StrategySettings } from '@/types/dashboard'
 
 const defaults = {
   max_trade_notional: 200,
@@ -54,131 +57,94 @@ export default async function SettingsPage() {
     )
   }
 
-  const { data: strategies } = await supabaseAdmin.from('strategies').select('*')
-  const { data: settings } = await supabaseAdmin.from('strategy_settings').select('*')
+  const { data: rawStrategies } = await supabaseAdmin.from('strategies').select('*')
+  const { data: rawSettings } = await supabaseAdmin.from('strategy_settings').select('*')
 
-  const settingsMap = Object.fromEntries((settings || []).map((s: any) => [s.strategy_id, s]));
+  const strategies = (rawStrategies ?? []) as Strategy[]
+  const settings = (rawSettings ?? []) as StrategySettings[]
 
-  const groupedByOwner = (strategies || []).reduce((acc: any, s: any) => {
-    const key = s.owner || 'Unassigned';
-    acc[key] = acc[key] || [];
-    acc[key].push(s);
-    return acc;
-  }, {} as Record<string, any[]>);
+  const settingsMap = settings.reduce<Record<string, StrategySettings>>((acc, setting) => {
+    acc[setting.strategy_id] = setting
+    return acc
+  }, {})
 
+  const groupedByOwner = strategies.reduce<Record<string, Strategy[]>>((acc, strategy) => {
+    const key = strategy.owner || 'Unassigned'
+    acc[key] = acc[key] || []
+    acc[key].push(strategy)
+    return acc
+  }, {})
 
   return (
     <main className="min-h-screen bg-slate-950 text-white p-8 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-semibold">Strategy Settings</h1>
-        <a href="/" className="text-slate-400 hover:text-white">← Back</a>
+        <Link href="/" className="text-slate-400 hover:text-white">
+          ← Back
+        </Link>
       </div>
 
       <div className="grid gap-6">
         {Object.entries(groupedByOwner).map(([group, groupStrategies]) => (
           <div key={group} className="space-y-4">
             <h2 className="text-xl font-semibold">{group}</h2>
-            {(groupStrategies as any[]).map((strategy: any) => {
-              const s = settingsMap[strategy.id] || {}
+            {groupStrategies.map((strategy) => {
+              const strategySettings = settingsMap[strategy.id] || {}
               return (
-                <form
-                  key={strategy.id}
-                  action={updateSettings}
-                  className="rounded-lg border border-slate-800 bg-slate-900 p-5 space-y-4"
-                >
-              <input type="hidden" name="strategy_id" value={strategy.id} />
-              <div>
-                <h2 className="text-xl font-medium">{strategy.name}</h2>
-                <p className="text-sm text-slate-400">Owner: {strategy.owner}</p>
-              </div>
+                <form key={strategy.id} action={updateSettings} className="rounded-lg border border-slate-800 bg-slate-900 p-5 space-y-4">
+                  <input type="hidden" name="strategy_id" value={strategy.id} />
+                  <div>
+                    <h2 className="text-xl font-medium">{strategy.name}</h2>
+                    <p className="text-sm text-slate-400">Owner: {strategy.owner}</p>
+                  </div>
 
-              <div className="text-sm text-slate-300 font-medium">Risk Settings</div>
-              <div className="grid md:grid-cols-3 gap-4">
-                <label className="text-sm">
-                  <div className="text-slate-400">Paper Capital</div>
-                  <input
-                    name="paper_capital"
-                    defaultValue={strategy.paper_capital ?? defaults.paper_capital}
-                    className="mt-1 w-full rounded bg-slate-800 px-3 py-2"
-                  />
-                </label>
-                <label className="text-sm">
-                  <div className="text-slate-400">Max Trade Notional</div>
-                  <input
-                    name="max_trade_notional"
-                    defaultValue={s.max_trade_notional ?? defaults.max_trade_notional}
-                    className="mt-1 w-full rounded bg-slate-800 px-3 py-2"
-                  />
-                </label>
-                <label className="text-sm">
-                  <div className="text-slate-400">Max Trades / Hour</div>
-                  <input
-                    name="max_trades_per_hour"
-                    defaultValue={s.max_trades_per_hour ?? defaults.max_trades_per_hour}
-                    className="mt-1 w-full rounded bg-slate-800 px-3 py-2"
-                  />
-                </label>
-                <label className="text-sm">
-                  <div className="text-slate-400">Max Daily Notional</div>
-                  <input
-                    name="max_daily_notional"
-                    defaultValue={s.max_daily_notional ?? defaults.max_daily_notional}
-                    className="mt-1 w-full rounded bg-slate-800 px-3 py-2"
-                  />
-                </label>
-                <label className="text-sm">
-                  <div className="text-slate-400">Max Daily Loss</div>
-                  <input
-                    name="max_daily_loss"
-                    defaultValue={s.max_daily_loss ?? defaults.max_daily_loss}
-                    className="mt-1 w-full rounded bg-slate-800 px-3 py-2"
-                  />
-                </label>
-              </div>
+                  <div className="text-sm text-slate-300 font-medium">Risk Settings</div>
+                  <div className="grid md:grid-cols-3 gap-4">
+                    <label className="text-sm">
+                      <div className="text-slate-400">Paper Capital</div>
+                      <input name="paper_capital" defaultValue={strategy.paper_capital ?? defaults.paper_capital} className="mt-1 w-full rounded bg-slate-800 px-3 py-2" type="number" step="0.01" />
+                    </label>
+                    <label className="text-sm">
+                      <div className="text-slate-400">Max Trade Notional</div>
+                      <input name="max_trade_notional" defaultValue={strategySettings.max_trade_notional ?? defaults.max_trade_notional} className="mt-1 w-full rounded bg-slate-800 px-3 py-2" type="number" step="0.01" />
+                    </label>
+                    <label className="text-sm">
+                      <div className="text-slate-400">Max Trades / Hour</div>
+                      <input name="max_trades_per_hour" defaultValue={strategySettings.max_trades_per_hour ?? defaults.max_trades_per_hour} className="mt-1 w-full rounded bg-slate-800 px-3 py-2" type="number" />
+                    </label>
+                    <label className="text-sm">
+                      <div className="text-slate-400">Max Daily Notional</div>
+                      <input name="max_daily_notional" defaultValue={strategySettings.max_daily_notional ?? defaults.max_daily_notional} className="mt-1 w-full rounded bg-slate-800 px-3 py-2" type="number" step="0.01" />
+                    </label>
+                    <label className="text-sm">
+                      <div className="text-slate-400">Max Daily Loss</div>
+                      <input name="max_daily_loss" defaultValue={strategySettings.max_daily_loss ?? defaults.max_daily_loss} className="mt-1 w-full rounded bg-slate-800 px-3 py-2" type="number" step="0.01" />
+                    </label>
+                  </div>
 
+                  <div className="text-sm text-slate-300 font-medium">Tuning Settings</div>
+                  <div className="grid md:grid-cols-3 gap-4">
+                    <label className="text-sm">
+                      <div className="text-slate-400">Divergence Threshold</div>
+                      <input name="divergence_threshold" defaultValue={strategySettings.divergence_threshold ?? 20} className="mt-1 w-full rounded bg-slate-800 px-3 py-2" type="number" step="0.1" />
+                    </label>
+                    <label className="text-sm">
+                      <div className="text-slate-400">Certainty Threshold</div>
+                      <input name="certainty_threshold" defaultValue={strategySettings.certainty_threshold ?? 0.95} className="mt-1 w-full rounded bg-slate-800 px-3 py-2" type="number" step="0.01" />
+                    </label>
+                    <label className="text-sm">
+                      <div className="text-slate-400">Liquidity Floor (M USD)</div>
+                      <input name="liquidity_floor" defaultValue={strategySettings.liquidity_floor ?? 0.5} className="mt-1 w-full rounded bg-slate-800 px-3 py-2" type="number" step="0.01" />
+                    </label>
+                    <label className="text-sm">
+                      <div className="text-slate-400">Order Size Multiplier</div>
+                      <input name="order_size_multiplier" defaultValue={strategySettings.order_size_multiplier ?? 1.0} className="mt-1 w-full rounded bg-slate-800 px-3 py-2" type="number" step="0.1" />
+                    </label>
+                  </div>
 
-              <div className="text-sm text-slate-300 font-medium">Tuning Settings</div>
-              <div className="grid md:grid-cols-3 gap-4">
-                <label className="text-sm">
-                  <div className="text-slate-400">Divergence Threshold</div>
-                  <input
-                    name="divergence_threshold"
-                    defaultValue={s.divergence_threshold ?? 20}
-                    className="mt-1 w-full rounded bg-slate-800 px-3 py-2"
-                  />
-                </label>
-                <label className="text-sm">
-                  <div className="text-slate-400">Certainty Threshold</div>
-                  <input
-                    name="certainty_threshold"
-                    defaultValue={s.certainty_threshold ?? 0.95}
-                    className="mt-1 w-full rounded bg-slate-800 px-3 py-2"
-                  />
-                </label>
-                <label className="text-sm">
-                  <div className="text-slate-400">Liquidity Floor (M USD)</div>
-                  <input
-                    name="liquidity_floor"
-                    defaultValue={s.liquidity_floor ?? 0.5}
-                    className="mt-1 w-full rounded bg-slate-800 px-3 py-2"
-                  />
-                </label>
-                <label className="text-sm">
-                  <div className="text-slate-400">Order Size Multiplier</div>
-                  <input
-                    name="order_size_multiplier"
-                    defaultValue={s.order_size_multiplier ?? 1.0}
-                    className="mt-1 w-full rounded bg-slate-800 px-3 py-2"
-                  />
-                </label>
-              </div>
-
-              <button
-                type="submit"
-                className="rounded bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-500"
-              >
-                Save Settings
-              </button>
+                  <button type="submit" className="rounded bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-500">
+                    Save Settings
+                  </button>
                 </form>
               )
             })}

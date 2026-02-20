@@ -1,8 +1,16 @@
 'use client'
 
+import Link from 'next/link'
 import { useMemo, useState } from 'react'
 
-const ranges = [
+import type { Strategy, Trade } from '@/types/dashboard'
+
+type RangeOption = {
+  label: string
+  days: number | null
+}
+
+const ranges: RangeOption[] = [
   { label: '1D', days: 1 },
   { label: '1W', days: 7 },
   { label: '1M', days: 30 },
@@ -12,29 +20,24 @@ const ranges = [
   { label: 'MAX', days: null },
 ]
 
-function formatMoney(value: number) {
-  return `$${value.toFixed(2)}`
-}
+const formatMoney = (value: number) => `$${value.toFixed(2)}`
+const formatDate = (ts?: string | null) => (ts ? new Date(ts).toLocaleString() : '—')
 
-function formatDate(ts?: string) {
-  return ts ? new Date(ts).toLocaleString() : '—'
-}
-
-function computeEquity(trades: any[], base: number) {
+const computeEquity = (trades: Trade[], base: number) => {
   let equity = base
   const points: { t: number; equity: number }[] = []
-  const sorted = [...trades].sort((a, b) => new Date(a.executed_at).getTime() - new Date(b.executed_at).getTime())
-  for (const t of sorted) {
-    equity += Number(t.pnl) || 0
-    points.push({ t: new Date(t.executed_at).getTime(), equity })
+  const sorted = [...trades].sort((a, b) => new Date(a.executed_at || '').getTime() - new Date(b.executed_at || '').getTime())
+  for (const trade of sorted) {
+    equity += Number(trade.pnl) || 0
+    points.push({ t: new Date(trade.executed_at || '').getTime(), equity })
   }
   return points
 }
 
-function buildPath(points: { t: number; equity: number }[], width: number, height: number) {
+const buildPath = (points: { t: number; equity: number }[], width: number, height: number) => {
   if (!points.length) return ''
-  const xs = points.map((p) => p.t)
-  const ys = points.map((p) => p.equity)
+  const xs = points.map((point) => point.t)
+  const ys = points.map((point) => point.equity)
   const minX = Math.min(...xs)
   const maxX = Math.max(...xs)
   const minY = Math.min(...ys)
@@ -43,20 +46,20 @@ function buildPath(points: { t: number; equity: number }[], width: number, heigh
   const yScale = (v: number) => (maxY === minY ? height / 2 : height - ((v - minY) / (maxY - minY)) * height)
 
   return points
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xScale(p.t).toFixed(2)} ${yScale(p.equity).toFixed(2)}`)
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${xScale(point.t).toFixed(2)} ${yScale(point.equity).toFixed(2)}`)
     .join(' ')
 }
 
-function buildHistogram(trades: any[], width: number, height: number) {
+const buildHistogram = (trades: Trade[], width: number, height: number) => {
   if (!trades.length) return []
-  const maxAbs = Math.max(...trades.map((t) => Math.abs(Number(t.pnl) || 0)), 1)
+  const maxAbs = Math.max(...trades.map((trade) => Math.abs(Number(trade.pnl) || 0)), 1)
   const barWidth = width / trades.length
   const baseline = height / 2
-  return trades.map((t, idx) => {
-    const pnl = Number(t.pnl) || 0
+  return trades.map((trade, index) => {
+    const pnl = Number(trade.pnl) || 0
     const barHeight = Math.min(baseline, (Math.abs(pnl) / maxAbs) * baseline)
     return {
-      x: idx * barWidth,
+      x: index * barWidth,
       y: pnl >= 0 ? baseline - barHeight : baseline,
       height: barHeight,
       width: barWidth - 2,
@@ -65,20 +68,42 @@ function buildHistogram(trades: any[], width: number, height: number) {
   })
 }
 
-export default function StrategyDetail({ strategy, trades }: { strategy: any; trades: any[] }) {
-  const [range, setRange] = useState(ranges[2]) // 1M default
+const resolutionColor = (trade: Trade, nowTs: number) => {
+  if (trade.is_resolved) {
+    return trade.side === 'YES' ? 'bg-emerald-500' : 'bg-rose-500'
+  }
+  if (trade.closes_at && new Date(trade.closes_at).getTime() < nowTs) {
+    return 'bg-amber-500'
+  }
+  return 'bg-slate-500'
+}
+
+const resolutionTitle = (trade: Trade, nowTs: number) => {
+  if (trade.is_resolved) return trade.side
+  if (trade.closes_at && new Date(trade.closes_at).getTime() < nowTs) return 'Past close, awaiting resolution'
+  return 'Unresolved'
+}
+
+interface Props {
+  strategy: Strategy
+  trades: Trade[]
+}
+
+export default function StrategyDetail({ strategy, trades }: Props) {
+  const [range, setRange] = useState<RangeOption>(ranges[2])
   const [sort, setSort] = useState<'recent' | 'best' | 'worst'>('recent')
+  const [now] = useState(() => new Date().getTime())
 
   const filtered = useMemo(() => {
     if (!range.days) return trades
-    const cutoff = Date.now() - range.days * 24 * 60 * 60 * 1000
-    return trades.filter((t) => new Date(t.executed_at).getTime() >= cutoff)
-  }, [trades, range])
+    const cutoff = now - range.days * 24 * 60 * 60 * 1000
+    return trades.filter((trade) => new Date(trade.executed_at || '').getTime() >= cutoff)
+  }, [trades, range, now])
 
   const sorted = useMemo(() => {
-    if (sort === 'best') return [...filtered].sort((a, b) => (b.pnl || 0) - (a.pnl || 0))
-    if (sort === 'worst') return [...filtered].sort((a, b) => (a.pnl || 0) - (b.pnl || 0))
-    return [...filtered].sort((a, b) => new Date(b.executed_at).getTime() - new Date(a.executed_at).getTime())
+    if (sort === 'best') return [...filtered].sort((a, b) => (Number(b.pnl) || 0) - (Number(a.pnl) || 0))
+    if (sort === 'worst') return [...filtered].sort((a, b) => (Number(a.pnl) || 0) - (Number(b.pnl) || 0))
+    return [...filtered].sort((a, b) => new Date(b.executed_at || '').getTime() - new Date(a.executed_at || '').getTime())
   }, [filtered, sort])
 
   const base = Number(strategy.paper_capital ?? 100)
@@ -88,15 +113,17 @@ export default function StrategyDetail({ strategy, trades }: { strategy: any; tr
   const path = buildPath(equityPoints, 740, 210)
   const bars = buildHistogram(filtered, 800, 160)
 
-  const minEquity = equityPoints.length ? Math.min(...equityPoints.map(p => p.equity)) : base;
-  const maxEquity = equityPoints.length ? Math.max(...equityPoints.map(p => p.equity)) : base;
-  const startTs = equityPoints.length ? new Date(equityPoints[0].t).toLocaleString() : '—';
-  const endTs = equityPoints.length ? new Date(equityPoints[equityPoints.length - 1].t).toLocaleString() : '—';
+  const minEquity = equityPoints.length ? Math.min(...equityPoints.map((point) => point.equity)) : base
+  const maxEquity = equityPoints.length ? Math.max(...equityPoints.map((point) => point.equity)) : base
+  const startTs = equityPoints.length ? new Date(equityPoints[0].t).toLocaleString() : '—'
+  const endTs = equityPoints.length ? new Date(equityPoints[equityPoints.length - 1].t).toLocaleString() : '—'
 
   return (
     <main className="min-h-screen bg-slate-950 text-white p-8 space-y-8">
       <div className="mb-4">
-        <a href="/" className="text-slate-300 hover:text-white">← Back</a>
+        <Link href="/" className="text-slate-300 hover:text-white">
+          ← Back
+        </Link>
       </div>
       <header className="flex items-center justify-between">
         <div>
@@ -106,13 +133,14 @@ export default function StrategyDetail({ strategy, trades }: { strategy: any; tr
       </header>
 
       <section className="flex gap-3 flex-wrap">
-        {ranges.map((r) => (
+        {ranges.map((rangeOption) => (
           <button
-            key={r.label}
-            className={`rounded-full px-3 py-1 text-sm border ${range.label === r.label ? 'border-blue-500 text-white' : 'border-slate-800 text-slate-400'}`}
-            onClick={() => setRange(r)}
+            key={rangeOption.label}
+            className={`rounded-full px-3 py-1 text-sm border ${range.label === rangeOption.label ? 'border-blue-500 text-white' : 'border-slate-800 text-slate-400'}`}
+            onClick={() => setRange(rangeOption)}
+            type="button"
           >
-            {r.label}
+            {rangeOption.label}
           </button>
         ))}
       </section>
@@ -131,9 +159,9 @@ export default function StrategyDetail({ strategy, trades }: { strategy: any; tr
             <text x="40" y="250" fontSize="10" fill="#94A3B8">{startTs}</text>
             <text x="560" y="250" fontSize="10" fill="#94A3B8">{endTs}</text>
             <g transform="translate(40,10)">
-            <path d={path} fill="none" stroke="currentColor" strokeWidth="2" />
-                        <path d={`${path} L 740 210 L 0 210 Z`} fill="currentColor" opacity="0.1" />
-          </g>
+              <path d={path} fill="none" stroke="currentColor" strokeWidth="2" />
+              <path d={`${path} L 740 210 L 0 210 Z`} fill="currentColor" opacity="0.1" />
+            </g>
           </svg>
         </div>
       </section>
@@ -143,16 +171,8 @@ export default function StrategyDetail({ strategy, trades }: { strategy: any; tr
         <div className="mt-4">
           <svg width="100%" viewBox="0 0 800 160">
             <rect x="0" y="80" width="800" height="1" fill="#334155" />
-            {bars.map((b, i) => (
-              <rect
-                key={i}
-                x={b.x}
-                y={b.y}
-                width={b.width}
-                height={b.height}
-                fill={b.positive ? '#22c55e' : '#ef4444'}
-                opacity="0.8"
-              />
+            {bars.map((bar, index) => (
+              <rect key={index} x={bar.x} y={bar.y} width={bar.width} height={bar.height} fill={bar.positive ? '#22c55e' : '#ef4444'} opacity="0.8" />
             ))}
           </svg>
         </div>
@@ -161,11 +181,7 @@ export default function StrategyDetail({ strategy, trades }: { strategy: any; tr
       <section>
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Trades</h2>
-          <select
-            className="bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm"
-            value={sort}
-            onChange={(e) => setSort(e.target.value as any)}
-          >
+          <select className="bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm" value={sort} onChange={(event) => setSort(event.target.value as 'recent' | 'best' | 'worst')}>
             <option value="recent">Most Recent</option>
             <option value="best">Best PnL</option>
             <option value="worst">Worst PnL</option>
@@ -184,19 +200,23 @@ export default function StrategyDetail({ strategy, trades }: { strategy: any; tr
               </tr>
             </thead>
             <tbody>
-              {sorted.map((t) => (
-                <tr key={t.id} className="border-t border-slate-800">
-                  <td className="px-4 py-2">{t.market}</td>
-                  <td className="px-4 py-2">{t.side}</td>
-                  <td className="px-4 py-2">{formatMoney(Number(t.notional || 0))}</td>
-                  <td className="px-4 py-2">{formatMoney(Number(t.pnl || 0))}</td>
-                  <td className="px-4 py-2"><span className={`inline-block h-3 w-3 rounded-full ${t.is_resolved ? (t.side === 'YES' ? 'bg-emerald-500' : 'bg-rose-500') : (t.closes_at && new Date(t.closes_at).getTime() < Date.now() ? 'bg-amber-500' : 'bg-slate-500')}`} title={t.is_resolved ? t.side : (t.closes_at && new Date(t.closes_at).getTime() < Date.now() ? 'Past close, awaiting resolution' : 'Unresolved')} /></td>
-                  <td className="px-4 py-2">{formatDate(t.executed_at)}</td>
+              {sorted.map((trade) => (
+                <tr key={trade.id} className="border-t border-slate-800">
+                  <td className="px-4 py-2">{trade.market}</td>
+                  <td className="px-4 py-2">{trade.side}</td>
+                  <td className="px-4 py-2">{formatMoney(Number(trade.notional || 0))}</td>
+                  <td className="px-4 py-2">{formatMoney(Number(trade.pnl || 0))}</td>
+                  <td className="px-4 py-2">
+                    <span className={`inline-block h-3 w-3 rounded-full ${resolutionColor(trade, now)}`} title={resolutionTitle(trade, now)} />
+                  </td>
+                  <td className="px-4 py-2">{formatDate(trade.executed_at)}</td>
                 </tr>
               ))}
               {sorted.length === 0 && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={6}>No trades in this range.</td>
+                  <td className="px-4 py-4 text-slate-400" colSpan={6}>
+                    No trades in this range.
+                  </td>
                 </tr>
               )}
             </tbody>

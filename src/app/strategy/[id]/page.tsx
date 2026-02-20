@@ -1,70 +1,87 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
+
 import StrategyDetail from './StrategyDetail'
+import type { Strategy, Trade } from '@/types/dashboard'
 
 export default function StrategyPage() {
   const params = useParams()
   const strategyId = params?.id?.toString()
-  const [strategy, setStrategy] = useState<any>(null)
-  const [trades, setTrades] = useState<any[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
+  const missingEnv = useMemo(() => !supabaseUrl || !anonKey, [supabaseUrl, anonKey])
+
+  const [strategy, setStrategy] = useState<Strategy | null>(null)
+  const [trades, setTrades] = useState<Trade[]>([])
+  const [error, setError] = useState<string | null>(missingEnv ? 'Missing Supabase env (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)' : null)
+  const [loading, setLoading] = useState<boolean>(!missingEnv && Boolean(strategyId))
 
   useEffect(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    if (!url || !anon) {
-      setError('Missing Supabase env (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)')
-      return
-    }
-    if (!strategyId) return
+    if (missingEnv || !strategyId) return
+    let cancelled = false
 
-    const headers = { apikey: anon, Authorization: `Bearer ${anon}` }
-    const id = encodeURIComponent(strategyId)
+    const headers = { apikey: anonKey, Authorization: `Bearer ${anonKey}` }
+    const encodedId = encodeURIComponent(strategyId)
 
     async function load() {
       try {
-        const sRes = await fetch(`${url}/rest/v1/strategies?id=eq.${id}`, { headers })
-        const sText = await sRes.text()
-        let sData: any = []
-        try { sData = JSON.parse(sText) } catch (_) {}
+        setLoading(true)
+        const [strategyRes, tradesRes] = await Promise.all([
+          fetch(`${supabaseUrl}/rest/v1/strategies?id=eq.${encodedId}`, { headers }),
+          fetch(`${supabaseUrl}/rest/v1/trades?strategy_id=eq.${encodedId}&order=executed_at.asc`, { headers }),
+        ])
 
-        if (!sRes.ok) {
-          setError(`Strategies fetch failed: ${sRes.status} ${sText}`)
-          return
+        if (!strategyRes.ok) {
+          const message = await strategyRes.text()
+          throw new Error(`Strategies fetch failed: ${strategyRes.status} ${message}`)
         }
 
-        const tRes = await fetch(`${url}/rest/v1/trades?strategy_id=eq.${id}&order=executed_at.asc`, { headers })
-        const tText = await tRes.text()
-        let tData: any = []
-        try { tData = JSON.parse(tText) } catch (_) {}
-
-        if (!Array.isArray(sData) || !sData.length) {
-          setError(`Strategy not found. URL=${url}. Anon present=${anon ? 'yes' : 'no'}`)
-          return
+        if (!tradesRes.ok) {
+          const message = await tradesRes.text()
+          throw new Error(`Trades fetch failed: ${tradesRes.status} ${message}`)
         }
 
-        setStrategy(sData[0])
-        setTrades(Array.isArray(tData) ? tData : [])
-      } catch (err: any) {
-        setError(err?.message || 'Failed to load strategy')
+        const strategyData: Strategy[] = await strategyRes.json()
+        const tradeData: Trade[] = await tradesRes.json()
+
+        if (!strategyData.length) {
+          throw new Error('Strategy not found')
+        }
+
+        if (!cancelled) {
+          setStrategy(strategyData[0])
+          setTrades(tradeData)
+          setError(null)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load strategy')
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
       }
     }
 
     load()
-  }, [strategyId])
+    return () => {
+      cancelled = true
+    }
+  }, [strategyId, supabaseUrl, anonKey, missingEnv])
 
-  if (error) {
+  if (error && !strategy) {
     return (
       <main className="min-h-screen bg-slate-950 text-white p-8">
-        <h1 className="text-2xl font-semibold">Strategy not found</h1>
+        <h1 className="text-2xl font-semibold">Strategy not available</h1>
         <p className="text-slate-400 mt-2">{error}</p>
       </main>
     )
   }
 
-  if (!strategy) {
+  if (loading || !strategy) {
     return (
       <main className="min-h-screen bg-slate-950 text-white p-8">
         <h1 className="text-2xl font-semibold">Loading...</h1>
