@@ -178,7 +178,7 @@ export default async function Home() {
                   <div className="font-semibold">{'$'}{strategy.equity.toFixed(2)}</div>
                 </div>
               </div>
-            </div>
+            </a>
           ))}
           {strategies.length === 0 && (
             <div className="text-slate-400">No strategies found. Populate Supabase to see live data.</div>
@@ -209,7 +209,7 @@ export default async function Home() {
                   <span className="text-slate-500">No heartbeat yet</span>
                 )}
               </div>
-            </div>
+            </a>
           ))}
           {agents.length === 0 && (
             <div className="text-slate-400">No agents registered yet.</div>
