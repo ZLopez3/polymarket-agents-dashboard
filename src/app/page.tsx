@@ -30,6 +30,9 @@ const avatarMap: Record<string, string> = {
   'Audi': '/avatars/audi.svg',
 };
 
+const formatTs = (ts: any) => ts ? new Date(ts).toLocaleString() : '—';
+const formatDate = (ts: any) => ts ? new Date(ts).toLocaleDateString() : '—';
+
 const statusColor = (status: string) => {
   const s = (status || '').toLowerCase();
   if (s.includes('ok') || s.includes('alive') || s.includes('up')) return 'bg-emerald-500';
@@ -84,6 +87,7 @@ export default async function Home() {
   });
 
   const totalPositions = new Set(trades.map((t: any) => t.market)).size;
+  const leaderboardRows = agentRows.filter((a: any) => a.name !== 'Audi');
 
 
   return (
@@ -131,7 +135,7 @@ export default async function Home() {
               </tr>
             </thead>
             <tbody>
-              {agentRows.map((agent: any) => (
+              {leaderboardRows.map((agent: any) => (
                 <tr key={agent.id} className="border-t border-slate-800">
                   <td className="px-4 py-2">{agent.name}</td>
                   <td className="px-4 py-2">{'$'}{Number(agent.portfolio).toFixed(2)}</td>
@@ -141,7 +145,7 @@ export default async function Home() {
                   <td className="px-4 py-2">{agent.trades}</td>
                 </tr>
               ))}
-              {agentRows.length === 0 && (
+              {leaderboardRows.length === 0 && (
                 <tr>
                   <td className="px-4 py-4 text-slate-400" colSpan={7}>No agents found.</td>
                 </tr>
@@ -199,7 +203,7 @@ export default async function Home() {
                 {latestHeartbeatMap[agent.id] ? (
                   <>
                     <span className={`h-2 w-2 rounded-full ${statusColor(latestHeartbeatMap[agent.id].status)}`} />
-                    <span className="text-slate-500">{new Date(latestHeartbeatMap[agent.id].created_at).toLocaleTimeString()}</span>
+                    <span className="text-slate-500">{formatTs(latestHeartbeatMap[agent.id].created_at)}</span>
                   </>
                 ) : (
                   <span className="text-slate-500">No heartbeat yet</span>
@@ -237,7 +241,7 @@ export default async function Home() {
                   <td className="px-4 py-2">{event.event_type}</td>
                   <td className="px-4 py-2">{event.severity}</td>
                   <td className="px-4 py-2">{event.message}</td>
-                  <td className="px-4 py-2">{event.created_at}</td>
+                  <td className="px-4 py-2">{formatTs(event.created_at)}</td>
                 </tr>
               ))}
               {events.length === 0 && (
@@ -274,9 +278,9 @@ export default async function Home() {
                   <td className="px-4 py-2">{trade.market}</td>
                   <td className="px-4 py-2">{trade.side}</td>
                   <td className="px-4 py-2">{trade.notional}</td>
-                  <td className="px-4 py-2">{trade.closes_at ? new Date(trade.closes_at).toLocaleDateString() : '—'}</td>
+                  <td className="px-4 py-2">{formatDate(trade.closes_at)}</td>
                   <td className="px-4 py-2">{trade.is_resolved ? '✅' : '⏳'}</td>
-                  <td className="px-4 py-2">{trade.executed_at}</td>
+                  <td className="px-4 py-2">{formatTs(trade.executed_at)}</td>
                 </tr>
               ))}
               {recentTrades.length === 0 && (
