@@ -28,6 +28,10 @@ create table if not exists public.trades (
   side text,
   notional numeric,
   pnl numeric,
+  market_id text,
+  market_slug text,
+  closes_at timestamptz,
+  is_resolved boolean default false,
   executed_at timestamptz default now()
 );
 

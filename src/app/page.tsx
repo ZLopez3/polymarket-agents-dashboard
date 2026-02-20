@@ -134,7 +134,7 @@ export default async function Home() {
               ))}
               {agentRows.length === 0 && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={6}>No agents found.</td>
+                  <td className="px-4 py-4 text-slate-400" colSpan={8}>No agents found.</td>
                 </tr>
               )}
             </tbody>
@@ -261,6 +261,8 @@ export default async function Home() {
                 <th className="px-4 py-2 text-left">Side</th>
                 <th className="px-4 py-2 text-left">Notional</th>
                 <th className="px-4 py-2 text-left">PnL</th>
+                <th className="px-4 py-2 text-left">Resolves</th>
+                <th className="px-4 py-2 text-left">Resolved</th>
                 <th className="px-4 py-2 text-left">Timestamp</th>
               </tr>
             </thead>
@@ -272,12 +274,14 @@ export default async function Home() {
                   <td className="px-4 py-2">{trade.side}</td>
                   <td className="px-4 py-2">{trade.notional}</td>
                   <td className="px-4 py-2">{trade.pnl}</td>
+                  <td className="px-4 py-2">{trade.closes_at ? new Date(trade.closes_at).toLocaleDateString() : '—'}</td>
+                  <td className="px-4 py-2">{trade.is_resolved ? '✅' : '⏳'}</td>
                   <td className="px-4 py-2">{trade.executed_at}</td>
                 </tr>
               ))}
               {recentTrades.length === 0 && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={6}>
+                  <td className="px-4 py-4 text-slate-400" colSpan={8}>
                     No trades recorded yet.
                   </td>
                 </tr>
