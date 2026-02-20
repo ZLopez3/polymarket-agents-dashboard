@@ -76,3 +76,14 @@ export interface AgentRow extends Agent {
   positions: number
   trades: number
 }
+export interface CopyTraderWallet {
+  address: string
+  label: string
+  winRate: number
+  copyScore: number
+  tier: string
+  lastTrade?: string | null
+  sourceUrl: string
+  notes?: string
+}
+

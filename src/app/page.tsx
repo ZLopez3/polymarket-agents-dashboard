@@ -1,8 +1,11 @@
 import Image from 'next/image'
 import Link from 'next/link'
 
+import CopyTraderTradesTable from '@/app/components/CopyTraderTradesTable'
+import CopyTraderWatchlist from '@/app/components/CopyTraderWatchlist'
+
 import { supabase } from '@/lib/supabaseClient'
-import type { Agent, AgentEvent, AgentHeartbeat, AgentRow, Strategy, StrategyStats, Trade } from '@/types/dashboard'
+import type { Agent, AgentEvent, AgentHeartbeat, AgentRow, CopyTraderWallet, Strategy, StrategyStats, Trade } from '@/types/dashboard'
 
 export const dynamic = 'force-dynamic'
 
@@ -138,7 +141,6 @@ export default async function Home() {
 
   const copyTraderStrategy = strategyStats.find((strategy) => strategy.name.toLowerCase().includes('copy trader'))
   const copyTraderTrades = copyTraderStrategy ? trades.filter((trade) => trade.strategy_id === copyTraderStrategy.id) : []
-  const copyTraderRecentTrades = copyTraderTrades.slice(0, 6)
   const copyTraderTotalNotional = copyTraderTrades.reduce((acc, trade) => acc + (Number(trade.notional) || 0), 0)
   const copyTraderAvgNotional = copyTraderTrades.length ? copyTraderTotalNotional / copyTraderTrades.length : 0
   const copyTraderUniqueMarkets = new Set(copyTraderTrades.map((trade) => trade.market)).size
@@ -147,6 +149,129 @@ export default async function Home() {
   const copyTraderSignals = events.filter((event) => (event.event_type ?? '').toLowerCase() === 'copy_trade_signal')
   const copyTraderRecentSignals = copyTraderSignals.slice(0, 5)
   const copyTraderLastSignal = copyTraderSignals[0] ?? null
+
+  const copyTraderWatchlist: CopyTraderWallet[] = [
+    {
+      address: '0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee',
+      label: 'Pilot wallet A',
+      winRate: 60,
+      copyScore: 7,
+      tier: 'yellow',
+      lastTrade: null,
+      sourceUrl: 'https://polymarketscan.com/wallet/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee',
+      notes: 'Initial pilot wallet (manual seed)',
+    },
+    {
+      address: '0x63ce342161250d705dc0b16df89036c8e5f9ba9a',
+      label: 'Pilot wallet B',
+      winRate: 60,
+      copyScore: 7,
+      tier: 'yellow',
+      lastTrade: null,
+      sourceUrl: 'https://polymarketscan.com/wallet/0x63ce342161250d705dc0b16df89036c8e5f9ba9a',
+      notes: 'Initial pilot wallet (manual seed)',
+    },
+    {
+      address: '0xdfe3fedc5c7679be42c3d393e99d4b55247b73c4',
+      label: 'cqs',
+      winRate: 67.77,
+      copyScore: 10,
+      tier: 'green',
+      lastTrade: '2026-02-19',
+      sourceUrl: 'https://polyvisionx.com/wallet/0xdfe3fedc5c7679be42c3d393e99d4b55247b73c4',
+      notes: 'Leaderboard #1',
+    },
+    {
+      address: '0xd1ecfa3e7d221851663f739626dcd15fca565d8e',
+      label: 'Scott8153',
+      winRate: 84.51,
+      copyScore: 10,
+      tier: 'green',
+      lastTrade: '2026-02-03',
+      sourceUrl: 'https://polyvisionx.com/wallet/0xd1ecfa3e7d221851663f739626dcd15fca565d8e',
+      notes: 'High win rate politics focus',
+    },
+    {
+      address: '0x5739ddf8672627ce076eff5f444610a250075f1a',
+      label: 'hopedieslast',
+      winRate: 69.51,
+      copyScore: 10,
+      tier: 'green',
+      lastTrade: '2026-02-20',
+      sourceUrl: 'https://polyvisionx.com/wallet/0x5739ddf8672627ce076eff5f444610a250075f1a',
+      notes: 'Balanced exposure',
+    },
+    {
+      address: '0x7f3c8979d0afa00007bae4747d5347122af05613',
+      label: 'LucasMeow',
+      winRate: 95.16,
+      copyScore: 10,
+      tier: 'green',
+      lastTrade: '2026-02-09',
+      sourceUrl: 'https://polyvisionx.com/wallet/0x7f3c8979d0afa00007bae4747d5347122af05613',
+      notes: 'Crypto-heavy specialist',
+    },
+    {
+      address: '0x4dfd481c16d9995b809780fd8a9808e8689f6e4a',
+      label: 'Magamyman',
+      winRate: 66.67,
+      copyScore: 10,
+      tier: 'green',
+      lastTrade: '2026-02-18',
+      sourceUrl: 'https://polyvisionx.com/wallet/0x4dfd481c16d9995b809780fd8a9808e8689f6e4a',
+      notes: 'Diversified exposure',
+    },
+    {
+      address: '0xe52c0a1327a12edc7bd54ea6f37ce00a4ca96924',
+      label: 'aff3',
+      winRate: 78.03,
+      copyScore: 10,
+      tier: 'green',
+      lastTrade: '2026-02-16',
+      sourceUrl: 'https://polyvisionx.com/wallet/0xe52c0a1327a12edc7bd54ea6f37ce00a4ca96924',
+      notes: 'Steady risk profile',
+    },
+    {
+      address: '0x0b219cf3d297991b58361dbebdbaa91e56b8deb6',
+      label: 'TerreMoto',
+      winRate: 83.7,
+      copyScore: 10,
+      tier: 'green',
+      lastTrade: '2026-02-19',
+      sourceUrl: 'https://polyvisionx.com/wallet/0x0b219cf3d297991b58361dbebdbaa91e56b8deb6',
+      notes: 'High confidence signals',
+    },
+    {
+      address: '0x85d575c99b977e9e39543747c859c83b727aaece',
+      label: 'warlasfutpro',
+      winRate: 79.57,
+      copyScore: 10,
+      tier: 'green',
+      lastTrade: '2026-02-19',
+      sourceUrl: 'https://polyvisionx.com/wallet/0x85d575c99b977e9e39543747c859c83b727aaece',
+      notes: 'Politics heavy mix',
+    },
+    {
+      address: '0xf5fe759cece500f58a431ef8dacea321f6e3e23d',
+      label: 'Stavenson',
+      winRate: 89.16,
+      copyScore: 10,
+      tier: 'green',
+      lastTrade: '2026-02-19',
+      sourceUrl: 'https://polyvisionx.com/wallet/0xf5fe759cece500f58a431ef8dacea321f6e3e23d',
+      notes: 'Ultra-consistent',
+    },
+    {
+      address: '0x9c667a1d1c1337c6dca9d93241d386e4ed346b66',
+      label: 'InfiniteCrypt0',
+      winRate: 71.15,
+      copyScore: 10,
+      tier: 'green',
+      lastTrade: '2026-02-19',
+      sourceUrl: 'https://polyvisionx.com/wallet/0x9c667a1d1c1337c6dca9d93241d386e4ed346b66',
+      notes: 'Fast trading cadence',
+    },
+  ]
 
   const indicator = (trade: Trade) => (
     <span
@@ -324,6 +449,7 @@ export default async function Home() {
                 <Link href="#copy-trader-trades" className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:text-white">
                   Jump to trades
                 </Link>
+                <CopyTraderWatchlist wallets={copyTraderWatchlist} />
               </div>
             </div>
             <div className="flex-1 grid gap-6 md:grid-cols-2">
@@ -347,36 +473,9 @@ export default async function Home() {
                   <h3 className="text-base font-semibold">Recent Copied Trades</h3>
                   <span className="text-xs text-slate-500">{copyTraderTrades.length} total</span>
                 </div>
-                {copyTraderRecentTrades.length > 0 ? (
-                  <div className="mt-3 overflow-x-auto">
-                    <table className="w-full text-xs sm:text-sm">
-                      <thead className="text-slate-400">
-                        <tr>
-                          <th className="px-3 py-2 text-left">Market</th>
-                          <th className="px-3 py-2 text-left">Side</th>
-                          <th className="px-3 py-2 text-left">Size</th>
-                          <th className="px-3 py-2 text-left">PnL</th>
-                          <th className="px-3 py-2 text-left">Resolved</th>
-                          <th className="px-3 py-2 text-left">Executed</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {copyTraderRecentTrades.map((trade) => (
-                          <tr key={trade.id} className="border-t border-slate-800">
-                            <td className="px-3 py-2">{trade.market}</td>
-                            <td className="px-3 py-2">
-                              <span className={`rounded-full px-2 py-0.5 text-xs ${trade.side === 'YES' ? 'bg-emerald-500/10 text-emerald-200' : 'bg-rose-500/10 text-rose-200'}`}>
-                                {trade.side}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2">${Number(trade.notional || 0).toFixed(2)}</td>
-                            <td className={`px-3 py-2 ${Number(trade.pnl || 0) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>${Number(trade.pnl || 0).toFixed(2)}</td>
-                            <td className="px-3 py-2">{indicator(trade)}</td>
-                            <td className="px-3 py-2">{formatTs(trade.executed_at)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                {copyTraderTrades.length > 0 ? (
+                  <div className="mt-3">
+                    <CopyTraderTradesTable trades={copyTraderTrades} />
                   </div>
                 ) : (
                   <div className="mt-3 text-sm text-slate-500">No copy-trade executions yet.</div>
