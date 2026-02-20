@@ -27,6 +27,7 @@ async function fetchSummary() {
 const avatarMap: Record<string, string> = {
   'BondLadder-Agent': '/avatars/bond-ladder.svg',
   'AIContrarian-Agent': '/avatars/ai-contrarian.png',
+  'Audi': '/avatars/audi.svg',
 };
 
 const statusColor = (status: string) => {
@@ -40,13 +41,11 @@ const statusColor = (status: string) => {
 export default async function Home() {
   const { strategies = [], agents = [], trades = [], events = [], heartbeats = [] } = await fetchSummary()
 
-  const latestHeartbeats = Object.values(
-    heartbeats.reduce((acc, hb) => {
-      if (!hb?.agent_id) return acc;
-      if (!acc[hb.agent_id]) acc[hb.agent_id] = hb;
-      return acc;
-    }, {} as Record<string, any>)
-  );
+  const latestHeartbeatMap = heartbeats.reduce((acc: Record<string, any>, hb: any) => {
+    if (!hb?.agent_id) return acc;
+    if (!acc[hb.agent_id]) acc[hb.agent_id] = hb;
+    return acc;
+  }, {} as Record<string, any>);
 
   const strategyMap = Object.fromEntries(strategies.map((s: any) => [s.id, s]));
 
@@ -182,8 +181,17 @@ export default async function Home() {
                 <img src={avatarMap[agent.name] || '/avatars/bond-ladder.svg'} alt={agent.name} className="h-10 w-10 rounded-full bg-slate-800 p-1" />
                 <div>
                   <h3 className="text-lg font-medium">{agent.name}</h3>
-                  <p className="text-sm text-slate-400">Strategy: {agent.strategy_id}</p>
+                  <p className="text-sm text-slate-400">Strategy: {agent.strategy_id ?? '—'}</p>
                   <p className="text-sm text-slate-400">Status: {agent.status}</p>
+                  {latestHeartbeatMap[agent.id] ? (
+                    <div className="mt-1 flex items-center gap-2 text-xs text-slate-400">
+                      <span className={`h-2 w-2 rounded-full ${statusColor(latestHeartbeatMap[agent.id].status)}`} />
+                      <span>{latestHeartbeatMap[agent.id].detail || 'heartbeat'}</span>
+                      <span className="text-slate-500">{new Date(latestHeartbeatMap[agent.id].created_at).toLocaleTimeString()}</span>
+                    </div>
+                  ) : (
+                    <div className="mt-1 text-xs text-slate-500">No heartbeat yet</div>
+                  )}
                 </div>
               </div>
             </div>
@@ -195,25 +203,8 @@ export default async function Home() {
       </section>
 
 
-      <section>
-        <h1 className="text-2xl font-semibold"><span className="mr-2">💓</span>Latest Heartbeats</h1>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {latestHeartbeats.map((hb: any) => (
-            <div key={hb.id} className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-              <div className="flex items-center gap-2">
-                <span className={`h-2 w-2 rounded-full ${statusColor(hb.status)}`} />
-                <h3 className="text-lg font-medium">Agent: {hb.agent_id}</h3>
-              </div>
-              <p className="text-sm text-slate-400">Status: {hb.status}</p>
-              <p className="text-sm text-slate-400">Detail: {hb.detail}</p>
-              <p className="text-xs text-slate-500">{hb.created_at}</p>
-            </div>
-          ))}
-          {latestHeartbeats.length === 0 && (
-            <div className="text-slate-400">No heartbeats recorded yet.</div>
-          )}
-        </div>
-      </section>
+      
+
 
       <section>
         <h1 className="text-2xl font-semibold">Recent Events</h1>
