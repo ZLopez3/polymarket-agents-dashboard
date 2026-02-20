@@ -23,12 +23,22 @@ export default function StrategyPage({ params }: { params: { id: string } }) {
     async function load() {
       try {
         const sRes = await fetch(`${url}/rest/v1/strategies?id=eq.${id}`, { headers })
-        const sData = await sRes.json()
+        const sText = await sRes.text()
+        let sData: any = []
+        try { sData = JSON.parse(sText) } catch (_) {}
+
+        if (!sRes.ok) {
+          setError(`Strategies fetch failed: ${sRes.status} ${sText}`)
+          return
+        }
+
         const tRes = await fetch(`${url}/rest/v1/trades?strategy_id=eq.${id}&order=executed_at.asc`, { headers })
-        const tData = await tRes.json()
+        const tText = await tRes.text()
+        let tData: any = []
+        try { tData = JSON.parse(tText) } catch (_) {}
 
         if (!Array.isArray(sData) || !sData.length) {
-          setError('Strategy not found')
+          setError(`Strategy not found. URL=${url}. Anon present=${anon ? 'yes' : 'no'}`)
           return
         }
 
