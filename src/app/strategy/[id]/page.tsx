@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
 import StrategyDetail from './StrategyDetail'
 
-export default function StrategyPage({ params }: { params: { id: string } }) {
-  const strategyId = params.id
+export default function StrategyPage() {
+  const params = useParams()
+  const strategyId = params?.id?.toString()
   const [strategy, setStrategy] = useState<any>(null)
   const [trades, setTrades] = useState<any[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -16,6 +18,7 @@ export default function StrategyPage({ params }: { params: { id: string } }) {
       setError('Missing Supabase env (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)')
       return
     }
+    if (!strategyId) return
 
     const headers = { apikey: anon, Authorization: `Bearer ${anon}` }
     const id = encodeURIComponent(strategyId)
