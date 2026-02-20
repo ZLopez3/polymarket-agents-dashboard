@@ -28,6 +28,8 @@ const avatarMap: Record<string, string> = {
   'BondLadder-Agent': '/avatars/bond-ladder.svg',
   'AIContrarian-Agent': '/avatars/ai-contrarian.png',
   'Audi': '/avatars/audi.svg',
+  'Fin': '/avatars/fin.svg',
+  'CopyTrader-Agent': '/avatars/copy-trader.svg',
 };
 
 const formatTs = (ts: any) => ts ? new Date(ts).toLocaleString() : '—';
@@ -43,6 +45,8 @@ const statusColor = (status: string) => {
 
 export default async function Home() {
   const { strategies = [], agents = [], trades = [], events = [], heartbeats = [] } = await fetchSummary()
+  const executionAgents = agents.filter((a: any) => (a.agent_type || 'execution') === 'execution');
+  const utilityAgents = agents.filter((a: any) => (a.agent_type || 'execution') === 'utility');
 
   const latestHeartbeatMap = heartbeats.reduce((acc: Record<string, any>, hb: any) => {
     if (!hb?.agent_id) return acc;
@@ -88,6 +92,12 @@ export default async function Home() {
 
   const totalPositions = new Set(trades.map((t: any) => t.market)).size;
   const leaderboardRows = agentRows.filter((a: any) => a.name !== 'Audi');
+  const strategyByAgent: Record<string, any[]> = strategyStats.reduce((acc: any, s: any) => {
+    const key = s.agent_id || 'unassigned';
+    acc[key] = acc[key] || [];
+    acc[key].push(s);
+    return acc;
+  }, {} as Record<string, any[]>);
 
 
   return (
@@ -155,41 +165,12 @@ export default async function Home() {
         </div>
       </section>
 
-      <section>
-        <h1 className="text-3xl font-semibold">Strategy Overview</h1>
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {strategyStats.map((strategy: any) => (
-            <a href={`/strategy/${strategy.id}`} className="block rounded-lg border border-slate-800 bg-slate-900 p-4 hover:border-slate-600">
-              <h2 className="text-xl font-medium">{strategy.name}</h2>
-              <p className="text-sm text-slate-400">Status: {strategy.status}</p>
-              <p className="text-sm text-slate-400">Owner: {strategy.owner}</p>
-              <p className="text-xs text-slate-500">Last tuned: {strategy.last_tuned_at ? new Date(strategy.last_tuned_at).toLocaleString() : '—'}</p>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-300">
-                <div>
-                  <div className="text-slate-500">Trades</div>
-                  <div className="font-semibold">{strategy.tradeCount}</div>
-                </div>
-                <div>
-                  <div className="text-slate-500">PnL</div>
-                  <div className="font-semibold">{'$'}{strategy.pnl.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="text-slate-500">Equity</div>
-                  <div className="font-semibold">{'$'}{strategy.equity.toFixed(2)}</div>
-                </div>
-              </div>
-            </a>
-          ))}
-          {strategies.length === 0 && (
-            <div className="text-slate-400">No strategies found. Populate Supabase to see live data.</div>
-          )}
-        </div>
-      </section>
+      
 
       <section>
-        <h1 className="text-2xl font-semibold">Agents</h1>
+        <h1 className="text-2xl font-semibold">Execution Agents</h1>
         <div className="mt-4 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {agents.map((agent) => (
+          {executionAgents.map((agent) => (
             <div key={agent.id} className="rounded-2xl border border-slate-800 bg-slate-900 p-6 flex flex-col items-center text-center h-[550px]">
               <div className="h-40 w-40 rounded-full bg-slate-800 p-2 mb-4">
                 <img src={avatarMap[agent.name] || '/avatars/bond-ladder.svg'} alt={agent.name} className="h-full w-full rounded-full object-cover" />
@@ -199,6 +180,20 @@ export default async function Home() {
                 <p className="text-sm text-slate-400 mt-1">Strategy: {agent.strategy_id ?? '—'}</p>
               )}
               <p className="text-sm text-slate-300 mt-3">{descriptionMap[agent.name] || 'Agent running.'}</p>
+              <div className="mt-4 w-full">
+                <div className="text-xs text-slate-500 uppercase tracking-wide">Strategies</div>
+                <div className="mt-2 space-y-2">
+                  {(strategyByAgent[agent.id] || []).map((s: any) => (
+                    <div key={s.id} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-xs">
+                      <div className="truncate">{s.name}</div>
+                      <div className="text-slate-400">PnL {s.pnl.toFixed(2)} • Eq {s.equity.toFixed(2)}</div>
+                    </div>
+                  ))}
+                  {(strategyByAgent[agent.id] || []).length === 0 && (
+                    <div className="text-xs text-slate-500">No strategies assigned</div>
+                  )}
+                </div>
+              </div>
               <div className="mt-auto flex items-center gap-2 text-xs text-slate-400">
                 {latestHeartbeatMap[agent.id] ? (
                   <>
@@ -211,7 +206,7 @@ export default async function Home() {
               </div>
             </div>
           ))}
-          {agents.length === 0 && (
+          {executionAgents.length === 0 && (
             <div className="text-slate-400">No agents registered yet.</div>
           )}
         </div>
