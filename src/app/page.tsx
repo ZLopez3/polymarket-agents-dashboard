@@ -89,6 +89,10 @@ export default async function Home() {
   return (
 
     <main className="min-h-screen bg-slate-950 text-white p-8 space-y-8">
+      <header className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Dashboard</h1>
+        <a href="/settings" className="rounded-full border border-slate-800 px-4 py-2 text-sm text-slate-300 hover:text-white">⚙️ Settings</a>
+      </header>
       <section className="grid gap-4 md:grid-cols-3">
         <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
           <div className="text-slate-400 text-sm">Agents</div>
@@ -180,26 +184,26 @@ export default async function Home() {
 
       <section>
         <h1 className="text-2xl font-semibold">Agents</h1>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <div className="mt-4 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {agents.map((agent) => (
-            <div key={agent.id} className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-              <div className="flex items-center gap-3">
-                <img src={avatarMap[agent.name] || '/avatars/bond-ladder.svg'} alt={agent.name} className="h-10 w-10 rounded-full bg-slate-800 p-1" />
-                <div>
-                  <h3 className="text-lg font-medium">{agent.name}</h3>
-                  {agent.name !== 'Audi' && (
-                    <p className="text-sm text-slate-400">Strategy: {agent.strategy_id ?? '—'}</p>
-                  )}
-                  <p className="text-sm text-slate-400">{descriptionMap[agent.name] || 'Agent running.'}</p>
-                  {latestHeartbeatMap[agent.id] ? (
-                    <div className="mt-1 flex items-center gap-2 text-xs text-slate-400">
-                      <span className={`h-2 w-2 rounded-full ${statusColor(latestHeartbeatMap[agent.id].status)}`} />
-                      <span className="text-slate-500">{new Date(latestHeartbeatMap[agent.id].created_at).toLocaleTimeString()}</span>
-                    </div>
-                  ) : (
-                    <div className="mt-1 text-xs text-slate-500">No heartbeat yet</div>
-                  )}
-                </div>
+            <div key={agent.id} className="rounded-2xl border border-slate-800 bg-slate-900 p-6 flex flex-col items-center text-center h-[550px]">
+              <div className="h-40 w-40 rounded-full bg-slate-800 p-2 mb-4">
+                <img src={avatarMap[agent.name] || '/avatars/bond-ladder.svg'} alt={agent.name} className="h-full w-full rounded-full object-cover" />
+              </div>
+              <h3 className="text-xl font-semibold">{agent.name}</h3>
+              {agent.name !== 'Audi' && (
+                <p className="text-sm text-slate-400 mt-1">Strategy: {agent.strategy_id ?? '—'}</p>
+              )}
+              <p className="text-sm text-slate-300 mt-3">{descriptionMap[agent.name] || 'Agent running.'}</p>
+              <div className="mt-auto flex items-center gap-2 text-xs text-slate-400">
+                {latestHeartbeatMap[agent.id] ? (
+                  <>
+                    <span className={`h-2 w-2 rounded-full ${statusColor(latestHeartbeatMap[agent.id].status)}`} />
+                    <span className="text-slate-500">{new Date(latestHeartbeatMap[agent.id].created_at).toLocaleTimeString()}</span>
+                  </>
+                ) : (
+                  <span className="text-slate-500">No heartbeat yet</span>
+                )}
               </div>
             </div>
           ))}
