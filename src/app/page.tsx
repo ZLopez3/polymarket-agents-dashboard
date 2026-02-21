@@ -405,6 +405,7 @@ export default async function Home() {
                     width={160}
                     height={160}
                     className="h-full w-full rounded-full object-cover"
+                    priority={idx === 0}
                   />
                 </div>
                 <h3 className="text-xl font-semibold">{agent.name}</h3>
