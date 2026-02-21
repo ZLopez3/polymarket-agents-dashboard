@@ -177,6 +177,14 @@ export default async function Home() {
   const totalPositions = new Set(trades.map((trade) => trade.market)).size
   const recentTrades = trades.slice(0, 20)
 
+  const finAgent = agents.find((agent) => agent.name === 'Fin') ?? null
+  const finHeartbeat = finAgent ? latestHeartbeatMap[finAgent.id] : undefined
+  const finLastUpdated = finHeartbeat ? formatTs(finHeartbeat.created_at) : null
+  const finEvent = finAgent
+    ? events.find((event) => event.agent_id === finAgent.id)
+    : undefined
+  const parsedFinInsight = parseFinInsight(finEvent?.message)
+
   const copyTraderStrategy = strategyStats.find((strategy) => strategy.name.toLowerCase().includes('copy trader'))
   const copyTraderTrades = copyTraderStrategy ? trades.filter((trade) => trade.strategy_id === copyTraderStrategy.id) : []
   const copyTraderTotalNotional = copyTraderTrades.reduce((acc, trade) => acc + (Number(trade.notional) || 0), 0)
