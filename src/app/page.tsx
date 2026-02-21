@@ -58,6 +58,29 @@ const resolutionTitle = (trade: Trade, nowTs: number) => {
   return 'Unresolved'
 }
 
+const parseFinInsight = (message?: string | null) => {
+  if (!message) return null
+  const topMarker = 'Top wallets:'
+  const hotMarker = 'Hot bets:'
+  const topIdx = message.indexOf(topMarker)
+  if (topIdx === -1) {
+    return { heading: message.trim(), wallets: [], bets: [] }
+  }
+  const hotIdx = message.indexOf(hotMarker)
+  const heading = message.slice(0, topIdx).trim()
+  const walletsSegment = hotIdx === -1 ? message.slice(topIdx + topMarker.length) : message.slice(topIdx + topMarker.length, hotIdx)
+  const betsSegment = hotIdx === -1 ? '' : message.slice(hotIdx + hotMarker.length)
+  const wallets = walletsSegment
+    .split('•')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+  const bets = betsSegment
+    .split('•')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+  return { heading, wallets, bets }
+}
+
 const statusColor = (status: string) => {
   const s = (status || '').toLowerCase()
   if (s.includes('ok') || s.includes('alive') || s.includes('up')) return 'bg-emerald-500'
@@ -107,6 +130,16 @@ export default async function Home() {
     return acc
   }, {})
 
+  const primaryStrategyByAgent = agents.reduce<Record<string, StrategyStats>>((acc, agent) => {
+    if (agent.strategy_id) {
+      const baseStrategy = strategyMap[agent.strategy_id]
+      if (baseStrategy) {
+        acc[agent.id] = baseStrategy
+      }
+    }
+    return acc
+  }, {})
+
   const agentNameMap = agents.reduce<Record<string, string>>((acc, agent) => {
     acc[agent.id] = agent.name
     return acc
@@ -134,6 +167,11 @@ export default async function Home() {
       trades: sTrades.length,
     }
   })
+
+  const agentRowMap = agentRows.reduce<Record<string, AgentRow>>((acc, row) => {
+    acc[row.id] = row
+    return acc
+  }, {})
 
   const leaderboardRows = agentRows.filter((agent) => (agent.agent_type ?? '').toLowerCase() !== 'utility')
   const totalPositions = new Set(trades.map((trade) => trade.market)).size
@@ -345,7 +383,11 @@ export default async function Home() {
         <h1 className="text-2xl font-semibold">Execution Agents</h1>
         <div className="mt-4 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {executionAgents.map((agent) => {
-            const assignedStrategies = strategyByAgent[agent.id] || []
+            const assignedStrategies = [...(strategyByAgent[agent.id] || [])]
+            const primaryStrategy = primaryStrategyByAgent[agent.id]
+            if (primaryStrategy && !assignedStrategies.some((strategy) => strategy.id === primaryStrategy.id)) {
+              assignedStrategies.unshift(primaryStrategy)
+            }
             return (
               <div key={agent.id} className="rounded-2xl border border-slate-800 bg-slate-900 p-6 flex flex-col items-center text-center h-[550px]">
                 <div className="h-40 w-40 rounded-full bg-slate-800 p-2 mb-4 overflow-hidden">
@@ -400,6 +442,45 @@ export default async function Home() {
           {executionAgents.length === 0 && <div className="text-slate-400">No agents registered yet.</div>}
         </div>
       </section>
+
+      {finAgent && (
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 shadow-[0_0_25px_rgba(15,118,110,0.15)]">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-emerald-400">Research Agent</p>
+              <h2 className="text-2xl font-semibold">Fin</h2>
+              <p className="text-sm text-slate-400">Analyzes whale wallets and PolyVision data to suggest new strategies.</p>
+            </div>
+            <div className="text-right text-xs text-slate-500">
+              <div>Last insight</div>
+              <div className="text-sm text-slate-300">{finLastUpdated || '—'}</div>
+            </div>
+          </div>
+          {parsedFinInsight ? (
+            <div className="mt-4 grid gap-6 md:grid-cols-2">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Top wallets</p>
+                <div className="mt-2 space-y-2 text-sm text-slate-200">
+                  {parsedFinInsight.wallets.slice(0, 4).map((line, idx) => (
+                    <p key={idx} className="rounded-lg border border-slate-800 bg-slate-950/60 p-2">{line}</p>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Hot bets</p>
+                <div className="mt-2 space-y-2 text-sm text-slate-200">
+                  {parsedFinInsight.bets.slice(0, 4).map((line, idx) => (
+                    <p key={idx} className="rounded-lg border border-slate-800 bg-slate-950/60 p-2">{line}</p>
+                  ))}
+                  {parsedFinInsight.bets.length === 0 && <p className="text-xs text-slate-500">No hot bets flagged.</p>}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-slate-500">Fin hasn’t published an insight yet.</p>
+          )}
+        </section>
+      )}
 
       {copyTraderStrategy && (
         <section className="rounded-2xl border border-emerald-900/40 bg-slate-900/80 p-6 shadow-[0_0_25px_rgba(16,185,129,0.05)]">
@@ -486,7 +567,7 @@ export default async function Home() {
         </section>
       )}
 
-      <section>
+      <section id="events">
         <h1 className="text-2xl font-semibold">Recent Events</h1>
         <div className="mt-4 overflow-x-auto rounded-lg border border-slate-800">
           <table className="w-full text-sm">

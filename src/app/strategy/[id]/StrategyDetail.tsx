@@ -97,7 +97,11 @@ export default function StrategyDetail({ strategy, trades }: Props) {
   const filtered = useMemo(() => {
     if (!range.days) return trades
     const cutoff = now - range.days * 24 * 60 * 60 * 1000
-    return trades.filter((trade) => new Date(trade.executed_at || '').getTime() >= cutoff)
+    const subset = trades.filter((trade) => new Date(trade.executed_at || '').getTime() >= cutoff)
+    if (subset.length === 0) {
+      return trades
+    }
+    return subset
   }, [trades, range, now])
 
   const sorted = useMemo(() => {
