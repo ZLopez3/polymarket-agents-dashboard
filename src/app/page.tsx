@@ -390,7 +390,7 @@ export default async function Home() {
       <section>
         <h1 className="text-2xl font-semibold">Execution Agents</h1>
         <div className="mt-4 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {executionAgents.map((agent) => {
+          {executionAgents.map((agent, idx) => {
             const assignedStrategies = [...(strategyByAgent[agent.id] || [])]
             const primaryStrategy = primaryStrategyByAgent[agent.id]
             if (primaryStrategy && !assignedStrategies.some((strategy) => strategy.id === primaryStrategy.id)) {
