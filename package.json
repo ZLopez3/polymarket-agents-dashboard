@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@polymarket/clob-client": "^5.2.4",
+    "ethers": "^5.8.0",
     "@supabase/supabase-js": "^2.97.0",
     "next": "16.1.6",
     "react": "19.2.3",
