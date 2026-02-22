@@ -88,13 +88,6 @@ export default async function SettingsPage() {
     return acc
   }, {})
 
-  const groupedByOwner = strategies.reduce<Record<string, Strategy[]>>((acc, strategy) => {
-    const key = strategy.owner || 'Unassigned'
-    acc[key] = acc[key] || []
-    acc[key].push(strategy)
-    return acc
-  }, {})
-
   return (
     <main className="min-h-screen bg-slate-950 text-white p-8 space-y-6">
       <Link href="/" className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-white transition-colors">
@@ -105,11 +98,9 @@ export default async function SettingsPage() {
         <KillSwitch hasLiveStrategies={strategies.some(s => s.trading_mode === 'live')} />
       </div>
 
-      <div className="grid gap-6">
-        {Object.entries(groupedByOwner).map(([group, groupStrategies]) => (
-          <div key={group} className="space-y-4">
-            <h2 className="text-xl font-semibold">{group}</h2>
-            {groupStrategies.map((strategy) => {
+      <div className="space-y-4">
+        <h2 className="text-xl font-semibold">Strategies</h2>
+            {strategies.map((strategy) => {
               const strategySettings = settingsMap[strategy.id] || {}
               return (
                 <CollapsibleSettingsCard
@@ -201,8 +192,6 @@ export default async function SettingsPage() {
                 </CollapsibleSettingsCard>
               )
             })}
-          </div>
-        ))}
       </div>
 
       <TradeLogPanel limit={100} />
