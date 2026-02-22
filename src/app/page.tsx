@@ -201,12 +201,15 @@ export default async function Home() {
     return n === 'cot' || (n.includes('copy') && n.includes('trader'))
   }) ?? null
 
-  // Match trades by strategy_id OR by agent_id on the trades table
-  const copyTraderTrades = trades.filter(
-    (t) =>
-      (copyTraderStrategy && t.strategy_id === copyTraderStrategy.id) ||
-      (copyTraderAgent && t.agent_id === copyTraderAgent.id)
+  // Match trades by strategy_id, or by any strategy linked to the Cot agent
+  const copyTraderStrategyIds = new Set(
+    strategyStats
+      .filter((s) => copyTraderAgent && s.agent_id === copyTraderAgent.id)
+      .map((s) => s.id)
   )
+  if (copyTraderStrategy) copyTraderStrategyIds.add(copyTraderStrategy.id)
+
+  const copyTraderTrades = trades.filter((t) => copyTraderStrategyIds.has(t.strategy_id))
 
   const copyTraderTotalNotional = copyTraderTrades.reduce((acc, trade) => acc + (Number(trade.notional) || 0), 0)
   const copyTraderAvgNotional = copyTraderTrades.length ? copyTraderTotalNotional / copyTraderTrades.length : 0
