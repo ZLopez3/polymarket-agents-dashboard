@@ -712,8 +712,6 @@ export default async function Home() {
           )}
         </div>
       </section>
-        </section>
-      )}
 
       <section id="events">
         <div className="flex items-center justify-between">
