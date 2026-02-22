@@ -6,6 +6,7 @@ import type { Strategy, StrategySettings } from '@/types/dashboard'
 import KillSwitch from '@/app/components/KillSwitch'
 import TradingModeToggle from '@/app/components/TradingModeToggle'
 import TradeLogPanel from '@/app/components/TradeLogPanel'
+import SaveButton from '@/app/components/SaveButton'
 
 const defaults = {
   max_trade_notional: 200,
@@ -192,9 +193,7 @@ export default async function SettingsPage() {
                     </label>
                   </div>
 
-                  <button type="submit" className="rounded bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-500">
-                    Save Settings
-                  </button>
+                  <SaveButton />
                 </form>
               )
             })}
