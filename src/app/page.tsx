@@ -1,4 +1,3 @@
-import Image from 'next/image'
 import Link from 'next/link'
 
 import CopyTraderTradesTable from '@/app/components/CopyTraderTradesTable'
@@ -97,6 +96,7 @@ export default async function Home() {
   const now = new Date().getTime()
 
   const executionAgents = agents.filter((agent) => (agent.agent_type ?? 'execution') === 'execution')
+  const utilityAgents = agents.filter((agent) => ['utility', 'research'].includes((agent.agent_type ?? '').toLowerCase()))
 
   const latestHeartbeatMap = heartbeats.reduce<Record<string, AgentHeartbeat>>((acc, hb) => {
     if (!hb?.agent_id || acc[hb.agent_id]) return acc
@@ -576,67 +576,75 @@ export default async function Home() {
         </div>
       </section>
 
-      {finAgent && (
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 shadow-[0_0_25px_rgba(15,118,110,0.15)]">
-          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-emerald-400">Research Agent</p>
-              <h2 className="text-2xl font-semibold">Fin</h2>
-              <p className="text-sm text-slate-400">Analyzes whale wallets and PolyVision data to suggest new strategies.</p>
-            </div>
-            <div className="text-right text-xs text-slate-500">
-              <div>Last insight</div>
-              <div className="text-sm text-slate-300">{finLastUpdated || '—'}</div>
-            </div>
-          </div>
-          {parsedFinInsight ? (
-            <div className="mt-4 grid gap-6 md:grid-cols-2">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-slate-500">Top wallets</p>
-                <div className="mt-2 space-y-2 text-sm text-slate-200">
-                  {parsedFinInsight.wallets.slice(0, 4).map((line, idx) => (
-                    <p key={idx} className="rounded-lg border border-slate-800 bg-slate-950/60 p-2">{line}</p>
-                  ))}
+      <section>
+        <h2 className="text-2xl font-semibold">Utility Agents</h2>
+        <div className="mt-4 space-y-4">
+          {/* Fin Research Agent */}
+          {finAgent && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-emerald-400">Research Agent</p>
+                  <h3 className="text-2xl font-semibold">Fin</h3>
+                  <p className="text-sm text-slate-400 mt-1">Analyzes whale wallets and PolyVision data to suggest new strategies.</p>
+                </div>
+                <div className="text-right text-xs text-slate-500 shrink-0">
+                  <div>Last insight</div>
+                  <div className="flex items-center justify-end gap-2 mt-0.5">
+                    {finHeartbeat && <span className={`h-2 w-2 rounded-full ${statusColor(finHeartbeat.status || '')}`} />}
+                    <span className="text-sm text-slate-300">{finLastUpdated || 'No heartbeat yet'}</span>
+                  </div>
                 </div>
               </div>
-              <div>
-                <p className="text-xs uppercase tracking-wide text-slate-500">Hot bets</p>
-                <div className="mt-2 space-y-2 text-sm text-slate-200">
-                  {parsedFinInsight.bets.slice(0, 4).map((line, idx) => (
-                    <p key={idx} className="rounded-lg border border-slate-800 bg-slate-950/60 p-2">{line}</p>
-                  ))}
-                  {parsedFinInsight.bets.length === 0 && <p className="text-xs text-slate-500">No hot bets flagged.</p>}
+              {parsedFinInsight ? (
+                <div className="mt-4 grid gap-6 md:grid-cols-2">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Top wallets</p>
+                    <div className="mt-2 space-y-2 text-sm text-slate-200">
+                      {parsedFinInsight.wallets.slice(0, 4).map((line, idx) => (
+                        <p key={idx} className="rounded-lg border border-slate-800 bg-slate-950/60 p-2">{line}</p>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Hot bets</p>
+                    <div className="mt-2 space-y-2 text-sm text-slate-200">
+                      {parsedFinInsight.bets.slice(0, 4).map((line, idx) => (
+                        <p key={idx} className="rounded-lg border border-slate-800 bg-slate-950/60 p-2">{line}</p>
+                      ))}
+                      {parsedFinInsight.bets.length === 0 && <p className="text-xs text-slate-500">No hot bets flagged.</p>}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">{"Fin hasn't published an insight yet."}</p>
+              )}
             </div>
-          ) : (
-            <p className="mt-4 text-sm text-slate-500">Fin hasn’t published an insight yet.</p>
           )}
-        </section>
-      )}
 
-      {copyTraderStrategy && (
-        <section className="rounded-2xl border border-emerald-900/40 bg-slate-900/80 p-6 shadow-[0_0_25px_rgba(16,185,129,0.05)]">
-          <div className="flex flex-col gap-6 xl:flex-row">
-            <div className="xl:w-1/3 space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="h-16 w-16 rounded-full bg-slate-950 p-2 overflow-hidden">
-                  <Image src="/avatars/copy-trader.svg" alt="Copy Trader avatar" width={64} height={64} className="h-full w-full rounded-full object-cover" />
-                </div>
+          {/* Copy Trader Agent */}
+          {copyTraderStrategy && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
                   <p className="text-xs uppercase tracking-wide text-emerald-400">Copy Trader</p>
-                  <h2 className="text-2xl font-semibold">{copyTraderStrategy.name}</h2>
-                  <p className="text-slate-400 text-sm">Mirrors prioritized whale wallets inside crypto markets.</p>
+                  <h3 className="text-2xl font-semibold">{copyTraderStrategy.name}</h3>
+                  <p className="text-sm text-slate-400 mt-1">Mirrors prioritized whale wallets across all Polymarket categories.</p>
+                </div>
+                <div className="text-right text-xs text-slate-500 shrink-0">
+                  <div>Last signal</div>
+                  <div className="text-sm text-slate-300 mt-0.5">{copyTraderLastSignal ? formatTs(copyTraderLastSignal.created_at) : 'No signals yet'}</div>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+
+              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
                 <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
                   <div className="text-xs uppercase text-slate-500">Equity</div>
                   <div className="text-lg font-semibold">${copyTraderStrategy.equity.toFixed(2)}</div>
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
                   <div className="text-xs uppercase text-slate-500">PnL</div>
-                  <div className="text-lg font-semibold text-emerald-300">${copyTraderStrategy.pnl.toFixed(2)}</div>
+                  <div className={`text-lg font-semibold ${copyTraderStrategy.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{copyTraderStrategy.pnl >= 0 ? '+' : ''}${copyTraderStrategy.pnl.toFixed(2)}</div>
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
                   <div className="text-xs uppercase text-slate-500">Trades</div>
@@ -647,7 +655,7 @@ export default async function Home() {
                   <div className="text-lg font-semibold">{copyTraderWinRate.toFixed(1)}%</div>
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-                  <div className="text-xs uppercase text-slate-500">Markets mirrored</div>
+                  <div className="text-xs uppercase text-slate-500">Markets</div>
                   <div className="text-lg font-semibold">{copyTraderUniqueMarkets}</div>
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
@@ -655,48 +663,55 @@ export default async function Home() {
                   <div className="text-lg font-semibold">${copyTraderAvgNotional.toFixed(2)}</div>
                 </div>
               </div>
-              <p className="text-xs text-slate-500">Last signal: {copyTraderLastSignal ? formatTs(copyTraderLastSignal.created_at) : '—'}</p>
-              <div className="flex flex-wrap gap-3">
+
+              <div className="mt-4 grid gap-6 md:grid-cols-2">
+                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-base font-semibold">Latest Whale Signals</h4>
+                    <span className="text-xs text-slate-500">{copyTraderRecentSignals.length ? 'Live feed' : 'Waiting'}</span>
+                  </div>
+                  <div className="mt-3 space-y-3 max-h-[280px] overflow-y-auto pr-1">
+                    {copyTraderRecentSignals.map((signal) => (
+                      <div key={signal.id} className="rounded-lg border border-slate-800/70 bg-slate-900/70 p-3">
+                        <p className="text-sm text-slate-100">{signal.message ?? 'Copy-trade signal'}</p>
+                        <p className="text-xs text-slate-500 mt-1">{formatTs(signal.created_at)}</p>
+                      </div>
+                    ))}
+                    {copyTraderRecentSignals.length === 0 && <div className="text-sm text-slate-500">No whale alerts logged yet.</div>}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4" id="copy-trader-trades">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-base font-semibold">Recent Copied Trades</h4>
+                    <span className="text-xs text-slate-500">{copyTraderTrades.length} total</span>
+                  </div>
+                  {copyTraderTrades.length > 0 ? (
+                    <div className="mt-3">
+                      <CopyTraderTradesTable trades={copyTraderTrades} />
+                    </div>
+                  ) : (
+                    <div className="mt-3 text-sm text-slate-500">No copy-trade executions yet.</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-3">
                 <Link href={`/strategy/${copyTraderStrategy.id}`} prefetch={false} className="rounded-full bg-emerald-500/20 px-4 py-2 text-sm text-emerald-100 hover:bg-emerald-500/30 transition">
                   Open strategy detail
                 </Link>
-                <Link href="#copy-trader-trades" className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:text-white">
+                <Link href="#copy-trader-trades" className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:text-white transition">
                   Jump to trades
                 </Link>
                 <CopyTraderWatchlist wallets={copyTraderWatchlist} />
               </div>
             </div>
-            <div className="flex-1 grid gap-6 md:grid-cols-2">
-              <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-base font-semibold">Latest Whale Signals</h3>
-                  <span className="text-xs text-slate-500">{copyTraderRecentSignals.length ? 'Live feed' : 'Waiting'}</span>
-                </div>
-                <div className="mt-3 space-y-3 max-h-[280px] overflow-y-auto pr-1">
-                  {copyTraderRecentSignals.map((signal) => (
-                    <div key={signal.id} className="rounded-lg border border-slate-800/70 bg-slate-900/70 p-3">
-                      <p className="text-sm text-slate-100">{signal.message ?? 'Copy-trade signal'}</p>
-                      <p className="text-xs text-slate-500 mt-1">{formatTs(signal.created_at)}</p>
-                    </div>
-                  ))}
-                  {copyTraderRecentSignals.length === 0 && <div className="text-sm text-slate-500">No whale alerts logged yet.</div>}
-                </div>
-              </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4" id="copy-trader-trades">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-base font-semibold">Recent Copied Trades</h3>
-                  <span className="text-xs text-slate-500">{copyTraderTrades.length} total</span>
-                </div>
-                {copyTraderTrades.length > 0 ? (
-                  <div className="mt-3">
-                    <CopyTraderTradesTable trades={copyTraderTrades} />
-                  </div>
-                ) : (
-                  <div className="mt-3 text-sm text-slate-500">No copy-trade executions yet.</div>
-                )}
-              </div>
-            </div>
-          </div>
+          )}
+
+          {utilityAgents.length === 0 && !finAgent && !copyTraderStrategy && (
+            <p className="text-slate-400">No utility agents registered yet.</p>
+          )}
+        </div>
+      </section>
         </section>
       )}
 
