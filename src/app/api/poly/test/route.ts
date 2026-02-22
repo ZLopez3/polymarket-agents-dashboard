@@ -13,10 +13,8 @@ import { testConnection, createPolyClient } from "@/lib/polymarket";
  */
 export async function GET() {
   try {
-    console.log("[v0] poly/test: starting connection test...");
     // Step 1: Check basic connectivity
     const { ok, host, chainId } = await testConnection();
-    console.log("[v0] poly/test: connectivity ok=", ok, "host=", host);
 
     // Step 2: Fetch a sample market to verify full auth
     const client = await createPolyClient();
@@ -25,7 +23,6 @@ export async function GET() {
     });
 
     const sampleMarket = markets.data?.[0] ?? null;
-    console.log("[v0] poly/test: sample market fetched:", sampleMarket?.question ?? "none");
 
     // Mask the public key for display
     const pubKey = process.env.POLY_PUBLIC_KEY ?? "";
@@ -52,7 +49,6 @@ export async function GET() {
         : null,
     });
   } catch (error: unknown) {
-    console.error("[v0] poly/test ERROR:", error);
     const message =
       error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
