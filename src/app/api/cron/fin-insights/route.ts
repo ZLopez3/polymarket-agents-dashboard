@@ -132,6 +132,7 @@ export async function GET(request: Request) {
           win_rate: e.win_rate,
           copy_score: e.copy_score ?? null,
           categories: e.categories || {},
+          last_trade_date: e.last_trade_date || null,
         },
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       }))

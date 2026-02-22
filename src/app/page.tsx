@@ -9,7 +9,7 @@ import type { Agent, AgentEvent, AgentHeartbeat, AgentRow, CopyTraderWallet, Str
 export const dynamic = 'force-dynamic'
 
 interface FinWalletRec {
-  payload: { address?: string; username?: string; win_rate?: number; copy_score?: number; categories?: Record<string, number> }
+  payload: { address?: string; username?: string; win_rate?: number; copy_score?: number; categories?: Record<string, number>; last_trade_date?: string | null }
   created_at: string
 }
 
@@ -34,7 +34,7 @@ async function fetchSummary(): Promise<SummaryData> {
     supabase.from('trades').select('*').order('executed_at', { ascending: false }).limit(500),
     supabase.from('events').select('*').order('created_at', { ascending: false }).limit(50),
     supabase.from('agent_heartbeats').select('*').order('created_at', { ascending: false }).limit(50),
-    supabase.from('events').select('*').like('event_type', 'copy_trader%').order('created_at', { ascending: false }).limit(20),
+    supabase.from('events').select('*').or('event_type.like.copy_trader%,event_type.like.copy_trade_%').order('created_at', { ascending: false }).limit(20),
     supabase.from('fin_recommendations').select('payload,created_at').eq('recommendation_type', 'wallet').gte('expires_at', new Date().toISOString()).order('created_at', { ascending: false }).limit(20),
   ])
 
@@ -236,8 +236,8 @@ export default async function Home() {
   }
 
   const totalPositions = new Set(trades.map((trade) => trade.market)).size
-  const recentTrades = trades.slice(0, 25)
-  const recentEvents = events.slice(0, 25)
+  const recentTrades = trades.slice(0, 30)
+  const recentEvents = events.slice(0, 30)
 
   const finAgent = agents.find((agent) => agent.name === 'Fin') ?? null
   const finHeartbeat = finAgent ? latestHeartbeatMap[finAgent.id] : undefined
@@ -268,7 +268,14 @@ export default async function Home() {
   )
   if (copyTraderStrategy) copyTraderStrategyIds.add(copyTraderStrategy.id)
 
-  const copyTraderTrades = trades.filter((t) => copyTraderStrategyIds.has(t.strategy_id))
+  const cotModeSwitchedAt = copyTraderStrategy?.mode_switched_at ? new Date(copyTraderStrategy.mode_switched_at).getTime() : 0
+  const copyTraderTrades = trades.filter((t) => {
+    if (!copyTraderStrategyIds.has(t.strategy_id)) return false
+    if (cotModeSwitchedAt && t.executed_at) {
+      return new Date(t.executed_at).getTime() >= cotModeSwitchedAt
+    }
+    return true
+  })
 
   const copyTraderTotalNotional = copyTraderTrades.reduce((acc, trade) => acc + (Number(trade.notional) || 0), 0)
   const copyTraderAvgNotional = copyTraderTrades.length ? copyTraderTotalNotional / copyTraderTrades.length : 0
@@ -281,39 +288,60 @@ export default async function Home() {
     ? events.filter((e) => e.agent_id === copyTraderAgent.id)
     : []
   const copyTraderSignals = [
-    ...copySignals,
-    ...cotAgentEvents.filter((e) => !copySignals.some((cs) => cs.id === e.id)),
-  ]
+  ...copySignals,
+  ...cotAgentEvents.filter((e) => !copySignals.some((cs) => cs.id === e.id)),
+  ].filter((e) => e.event_type !== 'copy_trader_online') // exclude heartbeats
   const copyTraderRecentSignals = copyTraderSignals.slice(0, 5)
   const copyTraderLastSignal = copyTraderSignals[0] ?? null
 
 
-  // Build watchlist dynamically from Fin wallet recommendations + seed wallets
-  const seedWallets: CopyTraderWallet[] = [
-    {
-      address: '0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee',
-      label: 'Seed wallet A',
-      winRate: 60,
-      copyScore: 7,
-      tier: 'yellow',
-      lastTrade: null,
-      sourceUrl: 'https://polymarketscan.com/wallet/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee',
-      notes: 'Permanent seed wallet',
-    },
-    {
-      address: '0x63ce342161250d705dc0b16df89036c8e5f9ba9a',
-      label: 'Seed wallet B',
-      winRate: 60,
-      copyScore: 7,
-      tier: 'yellow',
-      lastTrade: null,
-      sourceUrl: 'https://polymarketscan.com/wallet/0x63ce342161250d705dc0b16df89036c8e5f9ba9a',
-      notes: 'Permanent seed wallet',
-    },
+  // Build watchlist: permanent wallets + Fin-recommended wallets
+  // Build a lookup from Fin recs so we can enrich permanent wallets with live data
+  const finRecMap = new Map<string, FinWalletRec['payload']>()
+  for (const r of finWalletRecs) {
+    if (r.payload?.address) finRecMap.set(r.payload.address.toLowerCase(), r.payload)
+  }
+
+  const permanentWallets: { address: string; label: string; defaultWinRate: number; defaultCopyScore: number; notes: string }[] = [
+    { address: '0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee', label: 'Pilot wallet A', defaultWinRate: 60, defaultCopyScore: 7, notes: 'Seed wallet' },
+    { address: '0x63ce342161250d705dc0b16df89036c8e5f9ba9a', label: 'Pilot wallet B', defaultWinRate: 60, defaultCopyScore: 7, notes: 'Seed wallet' },
+    { address: '0xdfe3fedc5c7679be42c3d393e99d4b55247b73c4', label: 'cqs', defaultWinRate: 67.8, defaultCopyScore: 10, notes: 'Leaderboard #1' },
+    { address: '0xd1ecfa3e7d221851663f739626dcd15fca565d8e', label: 'Scott8153', defaultWinRate: 84.5, defaultCopyScore: 10, notes: 'High win rate politics' },
+    { address: '0x5739ddf8672627ce076eff5f444610a250075f1a', label: 'hopedieslast', defaultWinRate: 69.5, defaultCopyScore: 10, notes: 'Balanced exposure' },
+    { address: '0x7f3c8979d0afa00007bae4747d5347122af05613', label: 'LucasMeow', defaultWinRate: 95.2, defaultCopyScore: 10, notes: 'Crypto specialist' },
+    { address: '0x4dfd481c16d9995b809780fd8a9808e8689f6e4a', label: 'Magamyman', defaultWinRate: 66.7, defaultCopyScore: 10, notes: 'Diversified' },
+    { address: '0xe52c0a1327a12edc7bd54ea6f37ce00a4ca96924', label: 'aff3', defaultWinRate: 78.0, defaultCopyScore: 10, notes: 'Steady risk profile' },
+    { address: '0x0b219cf3d297991b58361dbebdbaa91e56b8deb6', label: 'TerreMoto', defaultWinRate: 83.7, defaultCopyScore: 10, notes: 'High confidence' },
+    { address: '0x85d575c99b977e9e39543747c859c83b727aaece', label: 'warlasfutpro', defaultWinRate: 79.6, defaultCopyScore: 10, notes: 'Politics heavy' },
+    { address: '0xf5fe759cece500f58a431ef8dacea321f6e3e23d', label: 'Stavenson', defaultWinRate: 89.2, defaultCopyScore: 10, notes: 'Ultra-consistent' },
+    { address: '0x9c667a1d1c1337c6dca9d93241d386e4ed346b66', label: 'InfiniteCrypt0', defaultWinRate: 71.2, defaultCopyScore: 10, notes: 'Fast cadence' },
   ]
 
-  const finWallets: CopyTraderWallet[] = finWalletRecs
-    .filter((r) => r.payload?.address)
+  const permanentAddresses = new Set(permanentWallets.map((w) => w.address.toLowerCase()))
+
+  // Build permanent wallet entries, enriched with live Fin data when available
+  const watchlistPermanent: CopyTraderWallet[] = permanentWallets.map((pw) => {
+    const addr = pw.address.toLowerCase()
+    const fin = finRecMap.get(addr)
+    const winRate = fin?.win_rate ?? pw.defaultWinRate
+    const copyScore = fin?.copy_score ?? pw.defaultCopyScore
+    const tier = winRate >= 80 ? 'green' : winRate >= 60 ? 'yellow' : 'red'
+    const label = (fin?.username) || pw.label
+    return {
+      address: addr,
+      label,
+      winRate,
+      copyScore,
+      tier,
+      lastTrade: fin?.last_trade_date ?? null,
+      sourceUrl: `https://polymarket.com/profile/${addr}`,
+      notes: fin ? `Fin-verified | ${pw.notes}` : pw.notes,
+    }
+  })
+
+  // Add Fin-discovered wallets not already in the permanent list
+  const extraFinWallets: CopyTraderWallet[] = finWalletRecs
+    .filter((r) => r.payload?.address && !permanentAddresses.has(r.payload.address.toLowerCase()))
     .map((r) => {
       const p = r.payload
       const addr = (p.address ?? '').toLowerCase()
@@ -329,16 +357,13 @@ export default async function Home() {
         winRate,
         copyScore,
         tier,
-        lastTrade: null,
-        sourceUrl: `https://polyvisionx.com/wallet/${addr}`,
-        notes: `Fin-recommended${topCat ? ` (${topCat} focus)` : ''}`,
+        lastTrade: p.last_trade_date ?? null,
+        sourceUrl: `https://polymarket.com/profile/${addr}`,
+        notes: `Fin-discovered${topCat ? ` (${topCat} focus)` : ''}`,
       }
     })
 
-  // Deduplicate: Fin wallets override seeds if same address
-  const seedAddresses = new Set(seedWallets.map((w) => w.address.toLowerCase()))
-  const uniqueFinWallets = finWallets.filter((w) => !seedAddresses.has(w.address.toLowerCase()))
-  const copyTraderWatchlist: CopyTraderWallet[] = [...seedWallets, ...uniqueFinWallets]
+  const copyTraderWatchlist: CopyTraderWallet[] = [...watchlistPermanent, ...extraFinWallets]
 
   const indicator = (trade: Trade) =>
     trade.is_resolved ? <span title="Resolved">{'✅'}</span> : <span title="Unresolved">{'❌'}</span>
@@ -623,7 +648,7 @@ export default async function Home() {
                     <h4 className="text-base font-semibold">Latest Whale Signals</h4>
                     <span className="text-xs text-slate-500">{copyTraderRecentSignals.length ? 'Live feed' : 'Waiting'}</span>
                   </div>
-                  <div className="mt-3 space-y-3 max-h-[280px] overflow-y-auto pr-1">
+                  <div className="mt-3 space-y-3 max-h-[228px] overflow-y-auto pr-1">
                     {copyTraderRecentSignals.map((signal) => (
                       <div key={signal.id} className="rounded-lg border border-slate-800/70 bg-slate-900/70 p-3">
                         <p className="text-sm text-slate-100">{signal.message ?? 'Copy-trade signal'}</p>
@@ -639,7 +664,7 @@ export default async function Home() {
                     <span className="text-xs text-slate-500">{copyTraderTrades.length} total</span>
                   </div>
                   {copyTraderTrades.length > 0 ? (
-                    <div className="mt-3">
+                    <div className="mt-3 max-h-[228px] overflow-y-auto pr-1">
                       <CopyTraderTradesTable trades={copyTraderTrades} />
                     </div>
                   ) : (
@@ -669,70 +694,69 @@ export default async function Home() {
       <section id="events">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">Recent Events</h1>
-          {events.length > 25 && (
-            <Link href="/events" className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
-              View all {events.length}+ events &rarr;
-            </Link>
-          )}
+          <Link href="/events" className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
+            View all events &rarr;
+          </Link>
         </div>
-        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-800">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-900">
-              <tr>
-                <th className="px-4 py-2 text-left">Agent</th>
-                <th className="px-4 py-2 text-left">Type</th>
-                <th className="px-4 py-2 text-left">Severity</th>
-                <th className="px-4 py-2 text-left">Message</th>
-                <th className="px-4 py-2 text-left">Timestamp</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentEvents.map((event) => (
-                <tr key={event.id} className="border-t border-slate-800">
-                  <td className="px-4 py-2">{(event.agent_id && agentNameMap[event.agent_id]) || event.agent_id || 'System'}</td>
-                  <td className="px-4 py-2">{event.event_type}</td>
-                  <td className="px-4 py-2">{event.severity}</td>
-                  <td className="px-4 py-2 max-w-[400px] truncate" title={event.message ?? undefined}>{event.message}</td>
-                  <td className="px-4 py-2">{formatTs(event.created_at)}</td>
-                </tr>
-              ))}
-              {recentEvents.length === 0 && (
+        <div className="mt-4 rounded-lg border border-slate-800 overflow-hidden">
+          <div className="max-h-[324px] overflow-y-auto overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-900 sticky top-0 z-10">
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={5}>
-                    No events recorded yet.
-                  </td>
+                  <th className="px-4 py-2 text-left">Agent</th>
+                  <th className="px-4 py-2 text-left">Type</th>
+                  <th className="px-4 py-2 text-left">Severity</th>
+                  <th className="px-4 py-2 text-left">Message</th>
+                  <th className="px-4 py-2 text-left">Timestamp</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {recentEvents.map((event) => (
+                  <tr key={event.id} className="border-t border-slate-800">
+                    <td className="px-4 py-2">{(event.agent_id && agentNameMap[event.agent_id]) || event.agent_id || 'System'}</td>
+                    <td className="px-4 py-2">{event.event_type}</td>
+                    <td className="px-4 py-2">{event.severity}</td>
+                    <td className="px-4 py-2 max-w-[400px] truncate" title={event.message ?? undefined}>{event.message}</td>
+                    <td className="px-4 py-2">{formatTs(event.created_at)}</td>
+                  </tr>
+                ))}
+                {recentEvents.length === 0 && (
+                  <tr>
+                    <td className="px-4 py-4 text-slate-400" colSpan={5}>
+                      No events recorded yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
       <section>
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">Recent Trades</h1>
-          {trades.length > 25 && (
-            <Link href="/trades" className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
-              View all {trades.length}+ trades &rarr;
-            </Link>
-          )}
+          <Link href="/trades" className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
+            View all trades &rarr;
+          </Link>
         </div>
-        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-800">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-900">
-              <tr>
-                <th className="px-4 py-2 text-left">Strategy</th>
-                <th className="px-4 py-2 text-left">Market</th>
-                <th className="px-4 py-2 text-left">Side</th>
-                <th className="px-4 py-2 text-left">Mode</th>
-                <th className="px-4 py-2 text-left">Status</th>
-                <th className="px-4 py-2 text-left">Notional</th>
-                <th className="px-4 py-2 text-left">Resolves</th>
-                <th className="px-4 py-2 text-left">Resolved</th>
-                <th className="px-4 py-2 text-left">Timestamp</th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="mt-4 rounded-lg border border-slate-800 overflow-hidden">
+          <div className="max-h-[324px] overflow-y-auto overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-900 sticky top-0 z-10">
+                <tr>
+                  <th className="px-4 py-2 text-left">Strategy</th>
+                  <th className="px-4 py-2 text-left">Market</th>
+                  <th className="px-4 py-2 text-left">Side</th>
+                  <th className="px-4 py-2 text-left">Mode</th>
+                  <th className="px-4 py-2 text-left">Status</th>
+                  <th className="px-4 py-2 text-left">Notional</th>
+                  <th className="px-4 py-2 text-left">Resolves</th>
+                  <th className="px-4 py-2 text-left">Resolved</th>
+                  <th className="px-4 py-2 text-left">Timestamp</th>
+                </tr>
+              </thead>
+              <tbody>
               {recentTrades.map((trade) => (
                 <tr key={trade.id} className={`border-t border-slate-800 ${trade.status === 'failed' ? 'bg-red-950/20' : ''}`}>
                   <td className="px-4 py-2">{strategyMap[trade.strategy_id]?.name || trade.strategy_id}</td>
@@ -775,7 +799,8 @@ export default async function Home() {
                 </tr>
               )}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       </section>
     </main>
