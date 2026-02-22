@@ -193,7 +193,8 @@ export default async function Home() {
 
   const leaderboardRows = agentRows.filter((agent) => (agent.agent_type ?? '').toLowerCase() !== 'utility')
   const totalPositions = new Set(trades.map((trade) => trade.market)).size
-  const recentTrades = trades.slice(0, 20)
+  const recentTrades = trades.slice(0, 25)
+  const recentEvents = events.slice(0, 25)
 
   const finAgent = agents.find((agent) => agent.name === 'Fin') ?? null
   const finHeartbeat = finAgent ? latestHeartbeatMap[finAgent.id] : undefined
@@ -648,7 +649,14 @@ export default async function Home() {
       )}
 
       <section id="events">
-        <h1 className="text-2xl font-semibold">Recent Events</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold">Recent Events</h1>
+          {events.length > 25 && (
+            <Link href="/events" className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
+              View all {events.length}+ events &rarr;
+            </Link>
+          )}
+        </div>
         <div className="mt-4 overflow-x-auto rounded-lg border border-slate-800">
           <table className="w-full text-sm">
             <thead className="bg-slate-900">
@@ -661,16 +669,16 @@ export default async function Home() {
               </tr>
             </thead>
             <tbody>
-              {events.map((event) => (
+              {recentEvents.map((event) => (
                 <tr key={event.id} className="border-t border-slate-800">
                   <td className="px-4 py-2">{(event.agent_id && agentNameMap[event.agent_id]) || event.agent_id || 'System'}</td>
                   <td className="px-4 py-2">{event.event_type}</td>
                   <td className="px-4 py-2">{event.severity}</td>
-                  <td className="px-4 py-2">{event.message}</td>
+                  <td className="px-4 py-2 max-w-[400px] truncate" title={event.message}>{event.message}</td>
                   <td className="px-4 py-2">{formatTs(event.created_at)}</td>
                 </tr>
               ))}
-              {events.length === 0 && (
+              {recentEvents.length === 0 && (
                 <tr>
                   <td className="px-4 py-4 text-slate-400" colSpan={5}>
                     No events recorded yet.
@@ -683,7 +691,14 @@ export default async function Home() {
       </section>
 
       <section>
-        <h1 className="text-2xl font-semibold">Recent Trades</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold">Recent Trades</h1>
+          {trades.length > 25 && (
+            <Link href="/trades" className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
+              View all {trades.length}+ trades &rarr;
+            </Link>
+          )}
+        </div>
         <div className="mt-4 overflow-x-auto rounded-lg border border-slate-800">
           <table className="w-full text-sm">
             <thead className="bg-slate-900">
