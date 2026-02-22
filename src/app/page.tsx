@@ -480,8 +480,7 @@ export default async function Home() {
                         </div>
                       </Link>
                       )
-                    }
-                    ))
+                    })
                   ) : (
                     <div className="text-xs text-slate-500">No strategies assigned</div>
                   )}
