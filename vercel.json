@@ -1,4 +1,13 @@
 {
+  "regions": ["lhr1"],
+  "functions": {
+    "src/app/api/cron/signals/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/cron/copy-trader/route.ts": {
+      "maxDuration": 60
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/heartbeat",
