@@ -1,0 +1,9 @@
+{
+  "defaults": {
+    "max_trade_notional": 300,
+    "max_trades_per_hour": 60,
+    "max_daily_notional": 15000,
+    "max_daily_loss": -500
+  },
+  "strategies": {}
+}
