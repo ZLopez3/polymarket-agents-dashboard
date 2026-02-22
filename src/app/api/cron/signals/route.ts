@@ -33,6 +33,7 @@ export async function GET(request: Request) {
   ) {
     const mode = strategyRow.trading_mode ?? 'paper'
     const strategyId = strategyRow.id
+    let liveError: string | null = null
 
     if (mode === 'live') {
       // Run safeguard checks
@@ -86,15 +87,55 @@ export async function GET(request: Request) {
           })
 
           results.push(`${strategyRow.name}: LIVE ${trade.market} ${trade.side}`)
-        } catch (err) {
+          } catch (err) {
+            liveError = (err as Error).message
+            await logTradeEvent(supabase, {
+              strategyId,
+              event: 'live_error',
+              mode: 'live',
+              marketId: trade.market_id,
+              error: liveError,
+              result: 'failed',
+            })
+          }
+        } else {
+          liveError = 'No tokenId available for live execution'
           await logTradeEvent(supabase, {
             strategyId,
-            event: 'live_response',
+            event: 'safety_block',
             mode: 'live',
             marketId: trade.market_id,
-            error: (err as Error).message,
-            result: 'failed',
+            result: liveError,
           })
+        }
+      }
+
+      // Always insert trade record -- with status and error for failed live trades
+      const tradeStatus = mode === 'live' && liveError ? 'failed' : 'filled'
+      await supabase.from('trades').insert({
+        strategy_id: strategyId,
+        agent_id: agentId,
+        market: trade.market,
+        side: trade.side,
+        notional: trade.notional,
+        pnl: tradeStatus === 'failed' ? 0 : trade.pnl,
+        market_id: trade.market_id || null,
+        market_slug: trade.market_slug || null,
+        closes_at: trade.closes_at || null,
+        is_resolved: trade.is_resolved ?? false,
+        status: tradeStatus,
+        error: liveError || null,
+        trading_mode: mode,
+      })
+
+      await logTradeEvent(supabase, {
+        strategyId,
+        event: mode === 'live' ? 'live_exec' : 'paper_exec',
+        mode,
+        marketId: trade.market_id,
+        orderDetails: { market: trade.market, side: trade.side, notional: trade.notional, pnl: trade.pnl, status: tradeStatus },
+        result: tradeStatus === 'failed' ? `failed: ${liveError}` : 'recorded',
+      })
           results.push(`${strategyRow.name}: LIVE FAILED - ${(err as Error).message}`)
           return
         }

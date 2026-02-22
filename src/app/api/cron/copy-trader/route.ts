@@ -77,6 +77,7 @@ export async function GET(request: Request) {
       recentSet.add(dedupeKey)
 
       const notional = sizeFromTier(w.tier)
+      let liveError: string | null = null
 
       if (mode === 'live') {
         // Run safeguard checks
@@ -130,38 +131,43 @@ export async function GET(request: Request) {
               result: 'success',
             })
           } catch (err) {
+            liveError = (err as Error).message
             await logTradeEvent(supabase, {
               strategyId: strategyRow.id,
               event: 'live_response',
               mode: 'live',
               marketId: w.market_id,
-              error: (err as Error).message,
+              error: liveError,
               result: 'failed',
             })
-            continue
           }
         } else {
+          liveError = 'No tokenId for live execution'
           await logTradeEvent(supabase, {
             strategyId: strategyRow.id,
             event: 'safety_block',
             mode: 'live',
             marketId: w.market_id,
-            result: 'No tokenId for live execution, skipping',
+            result: liveError,
           })
         }
       }
 
-      // Insert trade record (paper always, live after success)
+      // Always insert trade record -- with status and error for failed live trades
+      const tradeStatus = mode === 'live' && liveError ? 'failed' : 'filled'
       await supabase.from('trades').insert({
         strategy_id: strategyRow.id,
         market: w.market_title,
         side,
         notional,
-        pnl: 0,
+        pnl: tradeStatus === 'failed' ? 0 : 0,
         market_id: w.market_id || null,
         market_slug: w.market_slug || null,
         closes_at: w.closes_at || null,
         is_resolved: w.is_resolved ?? false,
+        status: tradeStatus,
+        error: liveError || null,
+        trading_mode: mode,
       })
 
       await logTradeEvent(supabase, {
@@ -169,8 +175,8 @@ export async function GET(request: Request) {
         event: mode === 'live' ? 'live_exec' : 'paper_exec',
         mode,
         marketId: w.market_id,
-        orderDetails: { market: w.market_title, side, notional, wallet: wallet.slice(0, 10) },
-        result: 'recorded',
+        orderDetails: { market: w.market_title, side, notional, wallet: wallet.slice(0, 10), status: tradeStatus },
+        result: tradeStatus === 'failed' ? `failed: ${liveError}` : 'recorded',
       })
 
       await supabase.from('events').insert({

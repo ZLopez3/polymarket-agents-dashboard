@@ -691,6 +691,8 @@ export default async function Home() {
                 <th className="px-4 py-2 text-left">Strategy</th>
                 <th className="px-4 py-2 text-left">Market</th>
                 <th className="px-4 py-2 text-left">Side</th>
+                <th className="px-4 py-2 text-left">Mode</th>
+                <th className="px-4 py-2 text-left">Status</th>
                 <th className="px-4 py-2 text-left">Notional</th>
                 <th className="px-4 py-2 text-left">Resolves</th>
                 <th className="px-4 py-2 text-left">Resolved</th>
@@ -699,10 +701,33 @@ export default async function Home() {
             </thead>
             <tbody>
               {recentTrades.map((trade) => (
-                <tr key={trade.id} className="border-t border-slate-800">
+                <tr key={trade.id} className={`border-t border-slate-800 ${trade.status === 'failed' ? 'bg-red-950/20' : ''}`}>
                   <td className="px-4 py-2">{strategyMap[trade.strategy_id]?.name || trade.strategy_id}</td>
-                  <td className="px-4 py-2">{trade.market}</td>
+                  <td className="px-4 py-2 max-w-[200px] truncate" title={trade.market}>{trade.market}</td>
                   <td className="px-4 py-2">{trade.side}</td>
+                  <td className="px-4 py-2">
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase ${
+                      trade.trading_mode === 'live' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+                    }`}>
+                      {trade.trading_mode ?? 'paper'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2">
+                    {trade.status === 'failed' ? (
+                      <span className="group relative cursor-help rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase text-red-400">
+                        FAILED
+                        {trade.error && (
+                          <span className="absolute bottom-full left-0 z-10 mb-1 hidden w-64 rounded bg-slate-800 px-3 py-2 text-xs font-normal normal-case text-slate-200 shadow-lg group-hover:block">
+                            {trade.error}
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase text-emerald-400">
+                        {trade.status ?? 'filled'}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-2">${Number(trade.notional || 0).toFixed(2)}</td>
                   <td className="px-4 py-2">{formatDate(trade.closes_at)}</td>
                   <td className="px-4 py-2">{indicator(trade)}</td>
@@ -711,7 +736,7 @@ export default async function Home() {
               ))}
               {recentTrades.length === 0 && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={7}>
+                  <td className="px-4 py-4 text-slate-400" colSpan={9}>
                     No trades recorded yet.
                   </td>
                 </tr>

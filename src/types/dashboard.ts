@@ -51,6 +51,9 @@ export interface Trade {
   market_id?: string | null
   market_slug?: string | null
   is_resolved?: boolean | null
+  status?: string | null
+  error?: string | null
+  trading_mode?: string | null
 }
 
 export interface AgentEvent {

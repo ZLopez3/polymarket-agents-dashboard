@@ -97,20 +97,45 @@ export default function CopyTraderTradesTable({ trades }: Props) {
             <tr>
               <th className="px-3 py-2 text-left">Market</th>
               <th className="px-3 py-2 text-left">Side</th>
+              <th className="px-3 py-2 text-left">Mode</th>
+              <th className="px-3 py-2 text-left">Status</th>
               <th className="px-3 py-2 text-left">Size</th>
               <th className="px-3 py-2 text-left">PnL</th>
-              <th className="px-3 py-2 text-left">Status</th>
+              <th className="px-3 py-2 text-left">Resolution</th>
               <th className="px-3 py-2 text-left">Executed</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((trade) => (
-              <tr key={trade.id} className="border-t border-slate-800">
-                <td className="px-3 py-2">{trade.market}</td>
+              <tr key={trade.id} className={`border-t border-slate-800 ${trade.status === 'failed' ? 'bg-red-950/20' : ''}`}>
+                <td className="px-3 py-2 max-w-[180px] truncate" title={trade.market}>{trade.market}</td>
                 <td className="px-3 py-2">
                   <span className={`rounded-full px-2 py-0.5 text-xs ${trade.side === 'YES' ? 'bg-emerald-500/10 text-emerald-200' : 'bg-rose-500/10 text-rose-200'}`}>
                     {trade.side}
                   </span>
+                </td>
+                <td className="px-3 py-2">
+                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase ${
+                    trade.trading_mode === 'live' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+                  }`}>
+                    {trade.trading_mode ?? 'paper'}
+                  </span>
+                </td>
+                <td className="px-3 py-2">
+                  {trade.status === 'failed' ? (
+                    <span className="group relative cursor-help rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase text-red-400">
+                      FAILED
+                      {trade.error && (
+                        <span className="absolute bottom-full left-0 z-10 mb-1 hidden w-64 rounded bg-slate-800 px-3 py-2 text-xs font-normal normal-case text-slate-200 shadow-lg group-hover:block">
+                          {trade.error}
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase text-emerald-400">
+                      {trade.status ?? 'filled'}
+                    </span>
+                  )}
                 </td>
                 <td className="px-3 py-2">{formatCurrency(trade.notional)}</td>
                 <td className={`px-3 py-2 ${Number(trade.pnl || 0) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{formatCurrency(trade.pnl)}</td>
@@ -122,7 +147,7 @@ export default function CopyTraderTradesTable({ trades }: Props) {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td className="px-3 py-4 text-slate-500" colSpan={6}>
+                <td className="px-3 py-4 text-slate-500" colSpan={8}>
                   No trades match filters.
                 </td>
               </tr>
