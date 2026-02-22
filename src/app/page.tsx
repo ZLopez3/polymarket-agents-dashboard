@@ -670,7 +670,7 @@ export default async function Home() {
                   <td className="px-4 py-2">{(event.agent_id && agentNameMap[event.agent_id]) || event.agent_id || 'System'}</td>
                   <td className="px-4 py-2">{event.event_type}</td>
                   <td className="px-4 py-2">{event.severity}</td>
-                  <td className="px-4 py-2 max-w-[400px] truncate" title={event.message}>{event.message}</td>
+                  <td className="px-4 py-2 max-w-[400px] truncate" title={event.message ?? undefined}>{event.message}</td>
                   <td className="px-4 py-2">{formatTs(event.created_at)}</td>
                 </tr>
               ))}
