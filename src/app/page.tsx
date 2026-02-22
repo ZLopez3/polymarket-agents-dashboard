@@ -15,19 +15,21 @@ interface SummaryData {
   trades: Trade[]
   events: AgentEvent[]
   heartbeats: AgentHeartbeat[]
+  copySignals: AgentEvent[]
 }
 
 async function fetchSummary(): Promise<SummaryData> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-    return { strategies: [], agents: [], trades: [], events: [], heartbeats: [] }
+    return { strategies: [], agents: [], trades: [], events: [], heartbeats: [], copySignals: [] }
   }
 
-  const [strategiesRes, agentsRes, tradesRes, eventsRes, heartbeatsRes] = await Promise.all([
+  const [strategiesRes, agentsRes, tradesRes, eventsRes, heartbeatsRes, copySignalsRes] = await Promise.all([
     supabase.from('strategies').select('*').limit(10),
     supabase.from('agents').select('*').limit(10),
     supabase.from('trades').select('*').order('executed_at', { ascending: false }).limit(500),
-    supabase.from('events').select('*').order('created_at', { ascending: false }).limit(10),
+    supabase.from('events').select('*').order('created_at', { ascending: false }).limit(50),
     supabase.from('agent_heartbeats').select('*').order('created_at', { ascending: false }).limit(50),
+    supabase.from('events').select('*').like('event_type', 'copy_trader%').order('created_at', { ascending: false }).limit(20),
   ])
 
   return {
@@ -36,6 +38,7 @@ async function fetchSummary(): Promise<SummaryData> {
     trades: (tradesRes.data ?? []) as Trade[],
     events: (eventsRes.data ?? []) as AgentEvent[],
     heartbeats: (heartbeatsRes.data ?? []) as AgentHeartbeat[],
+    copySignals: (copySignalsRes.data ?? []) as AgentEvent[],
   }
 }
 
@@ -90,7 +93,7 @@ const statusColor = (status: string) => {
 }
 
 export default async function Home() {
-  const { strategies, agents, trades, events, heartbeats } = await fetchSummary()
+  const { strategies, agents, trades, events, heartbeats, copySignals } = await fetchSummary()
   const now = new Date().getTime()
 
   const executionAgents = agents.filter((agent) => (agent.agent_type ?? 'execution') === 'execution')
@@ -185,16 +188,50 @@ export default async function Home() {
     : undefined
   const parsedFinInsight = parseFinInsight(finEvent?.message)
 
-  const copyTraderStrategy = strategyStats.find((strategy) => strategy.name.toLowerCase().includes('copy trader'))
-  const copyTraderTrades = copyTraderStrategy ? trades.filter((trade) => trade.strategy_id === copyTraderStrategy.id) : []
+  // Locate the Copy Trader strategy first (name is reliable), then find the Cot agent via agent_id
+  const copyTraderStrategy = strategyStats.find((s) => {
+    const n = s.name.toLowerCase().replace(/[-_]/g, ' ')
+    return n.includes('copy trader') || n.includes('copytrader') || n.includes('whale mirror')
+  }) ?? null
+
+  // The copy-trader agent is named "Cot" in the DB -- match by agent_id from the strategy, or by name
+  const copyTraderAgent = agents.find((a) => {
+    if (copyTraderStrategy?.agent_id && a.id === copyTraderStrategy.agent_id) return true
+    const n = a.name.toLowerCase()
+    return n === 'cot' || (n.includes('copy') && n.includes('trader'))
+  }) ?? null
+
+  // Match trades by strategy_id, or by any strategy linked to the Cot agent
+  const copyTraderStrategyIds = new Set(
+    strategyStats
+      .filter((s) => copyTraderAgent && s.agent_id === copyTraderAgent.id)
+      .map((s) => s.id)
+  )
+  if (copyTraderStrategy) copyTraderStrategyIds.add(copyTraderStrategy.id)
+
+  const copyTraderTrades = trades.filter((t) => copyTraderStrategyIds.has(t.strategy_id))
+
   const copyTraderTotalNotional = copyTraderTrades.reduce((acc, trade) => acc + (Number(trade.notional) || 0), 0)
   const copyTraderAvgNotional = copyTraderTrades.length ? copyTraderTotalNotional / copyTraderTrades.length : 0
   const copyTraderUniqueMarkets = new Set(copyTraderTrades.map((trade) => trade.market)).size
   const copyTraderWins = copyTraderTrades.filter((trade) => Number(trade.pnl) > 0).length
   const copyTraderWinRate = copyTraderTrades.length ? (copyTraderWins / copyTraderTrades.length) * 100 : 0
-  const copyTraderSignals = events.filter((event) => (event.event_type ?? '').toLowerCase() === 'copy_trade_signal')
+
+  // Collect copy trader signals: dedicated query + events from the Cot agent + matching event_type fallback
+  const cotAgentEvents = copyTraderAgent
+    ? events.filter((e) => e.agent_id === copyTraderAgent.id)
+    : []
+  const copyTraderSignals = [
+    ...copySignals,
+    ...cotAgentEvents.filter((e) => !copySignals.some((cs) => cs.id === e.id)),
+  ]
   const copyTraderRecentSignals = copyTraderSignals.slice(0, 5)
   const copyTraderLastSignal = copyTraderSignals[0] ?? null
+
+  console.log("[v0] copyTraderAgent:", copyTraderAgent?.name ?? "NOT FOUND", copyTraderAgent?.id ?? "")
+  console.log("[v0] copyTraderStrategy:", copyTraderStrategy?.name ?? "NOT FOUND", copyTraderStrategy?.id ?? "")
+  console.log("[v0] copyTraderTrades count:", copyTraderTrades.length)
+  console.log("[v0] copyTraderSignals count:", copyTraderSignals.length, "(dedicated:", copySignals.length, "/ cotAgentEvents:", cotAgentEvents.length, ")")
 
   const copyTraderWatchlist: CopyTraderWallet[] = [
     {
@@ -390,7 +427,7 @@ export default async function Home() {
       <section>
         <h1 className="text-2xl font-semibold">Execution Agents</h1>
         <div className="mt-4 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {executionAgents.map((agent) => {
+          {executionAgents.map((agent, idx) => {
             const assignedStrategies = [...(strategyByAgent[agent.id] || [])]
             const primaryStrategy = primaryStrategyByAgent[agent.id]
             if (primaryStrategy && !assignedStrategies.some((strategy) => strategy.id === primaryStrategy.id)) {
@@ -405,6 +442,7 @@ export default async function Home() {
                     width={160}
                     height={160}
                     className="h-full w-full rounded-full object-cover"
+                    priority
                   />
                 </div>
                 <h3 className="text-xl font-semibold">{agent.name}</h3>

@@ -5,7 +5,7 @@ import type { Strategy, Trade } from '@/types/dashboard'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 interface StrategyPageProps {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }
 
 export const revalidate = 60
@@ -21,7 +21,7 @@ export default async function StrategyPage({ params }: StrategyPageProps) {
     )
   }
 
-  const strategyId = params?.id
+  const { id: strategyId } = await params
   if (!strategyId) {
     notFound()
   }
