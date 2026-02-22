@@ -1,4 +1,3 @@
-import Image from 'next/image'
 import Link from 'next/link'
 
 import CopyTraderTradesTable from '@/app/components/CopyTraderTradesTable'
@@ -97,22 +96,13 @@ export default async function Home() {
   const now = new Date().getTime()
 
   const executionAgents = agents.filter((agent) => (agent.agent_type ?? 'execution') === 'execution')
+  const utilityAgents = agents.filter((agent) => ['utility', 'research'].includes((agent.agent_type ?? '').toLowerCase()))
 
   const latestHeartbeatMap = heartbeats.reduce<Record<string, AgentHeartbeat>>((acc, hb) => {
     if (!hb?.agent_id || acc[hb.agent_id]) return acc
     acc[hb.agent_id] = hb
     return acc
   }, {})
-
-  const avatarMap: Record<string, string> = {
-    'BondLadder-Agent': '/avatars/bond-ladder.jpg',
-    'AIContrarian-Agent': '/avatars/ai-contrarian.jpg',
-    Audi: '/avatars/audi.jpg',
-    Fin: '/avatars/fin.jpg',
-    'Fin-Agent': '/avatars/fin.jpg',
-    'CopyTrader-Agent': '/avatars/copy-trader.jpg',
-    Cot: '/avatars/copy-trader.jpg',
-  }
 
   const descriptionMap: Record<string, string> = {
     'BondLadder-Agent': 'Harvests high-certainty markets for steady yield.',
@@ -517,47 +507,49 @@ export default async function Home() {
       </section>
 
       <section>
-        <h1 className="text-2xl font-semibold">Execution Agents</h1>
-        <div className="mt-4 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {executionAgents.map((agent, idx) => {
+        <h2 className="text-2xl font-semibold">Execution Agents</h2>
+        <div className="mt-4 space-y-4">
+          {executionAgents.map((agent) => {
             const assignedStrategies = [...(strategyByAgent[agent.id] || [])]
             const primaryStrategy = primaryStrategyByAgent[agent.id]
-            if (primaryStrategy && !assignedStrategies.some((strategy) => strategy.id === primaryStrategy.id)) {
+            if (primaryStrategy && !assignedStrategies.some((s) => s.id === primaryStrategy.id)) {
               assignedStrategies.unshift(primaryStrategy)
             }
+            const hb = latestHeartbeatMap[agent.id]
             return (
-              <div key={agent.id} className="rounded-2xl border border-slate-800 bg-slate-900 p-6 flex flex-col items-center text-center h-[550px]">
-                <div className="h-40 w-40 mb-4">
-                  <Image
-                    src={avatarMap[agent.name] || '/avatars/bond-ladder.jpg'}
-                    alt={agent.name}
-                    width={160}
-                    height={160}
-                    className="h-full w-full object-contain"
-                    priority
-                  />
+              <div key={agent.id} className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-emerald-400">Execution Agent</p>
+                    <h3 className="text-2xl font-semibold">{agent.name}</h3>
+                    <p className="text-sm text-slate-400 mt-1">{descriptionMap[agent.name] || 'Agent running.'}</p>
+                  </div>
+                  <div className="text-right text-xs text-slate-500 shrink-0">
+                    <div>Last heartbeat</div>
+                    <div className="flex items-center justify-end gap-2 mt-0.5">
+                      {hb && <span className={`h-2 w-2 rounded-full ${statusColor(hb.status || '')}`} />}
+                      <span className="text-sm text-slate-300">{hb ? formatTs(hb.created_at) : 'No heartbeat yet'}</span>
+                    </div>
+                  </div>
                 </div>
-                <h3 className="text-xl font-semibold">{agent.name}</h3>
-                <p className="text-sm text-slate-300 mt-3">{descriptionMap[agent.name] || 'Agent running.'}</p>
-                <div className="mt-4 w-full space-y-2">
+                <div className="mt-4 space-y-2">
                   {assignedStrategies.length > 0 ? (
                     assignedStrategies.map((strategy) => {
                       const sMode = strategy.trading_mode ?? 'paper'
                       const isLive = sMode === 'live'
                       return (
-                      <Link
-                        key={strategy.id}
-                        href={`/strategy/${strategy.id}`}
-                        prefetch={false}
-                        className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs transition hover:bg-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 ${
-                          isLive
-                            ? 'border-emerald-700/50 bg-slate-950 shadow-[0_0_12px_rgba(16,185,129,0.15)] hover:border-emerald-600/60'
-                            : 'border-slate-800 bg-slate-950 hover:border-slate-700'
-                        }`}
-                        aria-label={`Open strategy ${strategy.name}`}
-                      >
-                        <div className="text-left">
-                          <div className="flex items-center gap-2">
+                        <Link
+                          key={strategy.id}
+                          href={`/strategy/${strategy.id}`}
+                          prefetch={false}
+                          className={`flex items-center justify-between rounded-lg border px-4 py-3 text-sm transition hover:bg-slate-800/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 ${
+                            isLive
+                              ? 'border-emerald-700/50 bg-slate-950/60'
+                              : 'border-slate-800 bg-slate-950/60'
+                          }`}
+                          aria-label={`Open strategy ${strategy.name}`}
+                        >
+                          <div className="flex items-center gap-3">
                             <span className="font-medium text-white/90">{strategy.name}</span>
                             <span className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase ${
                               isLive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
@@ -565,98 +557,94 @@ export default async function Home() {
                               {sMode}
                             </span>
                           </div>
-                          <div className="text-[10px] uppercase tracking-wide text-slate-500">Tap to open details</div>
-                        </div>
-                        <div className="text-slate-400 text-right leading-tight">
-                          PnL {strategy.pnl.toFixed(2)}
-                          <br />
-                          Eq {strategy.equity.toFixed(2)}
-                        </div>
-                      </Link>
+                          <div className="flex items-center gap-4 text-slate-400 text-xs font-mono">
+                            <span className={strategy.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}>PnL {strategy.pnl >= 0 ? '+' : ''}{strategy.pnl.toFixed(2)}</span>
+                            <span>Eq ${strategy.equity.toFixed(2)}</span>
+                            <span className="text-slate-500">&rarr;</span>
+                          </div>
+                        </Link>
                       )
                     })
                   ) : (
-                    <div className="text-xs text-slate-500">No strategies assigned</div>
-                  )}
-                </div>
-                <div className="mt-auto flex items-center gap-2 text-xs text-slate-400">
-                  {latestHeartbeatMap[agent.id] ? (
-                    <>
-                      <span className={`h-2 w-2 rounded-full ${statusColor(latestHeartbeatMap[agent.id].status || '')}`} />
-                      <span className="text-slate-500">{formatTs(latestHeartbeatMap[agent.id].created_at)}</span>
-                    </>
-                  ) : (
-                    <span className="text-slate-500">No heartbeat yet</span>
+                    <p className="text-sm text-slate-500">No strategies assigned.</p>
                   )}
                 </div>
               </div>
             )
           })}
-          {executionAgents.length === 0 && <div className="text-slate-400">No agents registered yet.</div>}
+          {executionAgents.length === 0 && <p className="text-slate-400">No agents registered yet.</p>}
         </div>
       </section>
 
-      {finAgent && (
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 shadow-[0_0_25px_rgba(15,118,110,0.15)]">
-          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-emerald-400">Research Agent</p>
-              <h2 className="text-2xl font-semibold">Fin</h2>
-              <p className="text-sm text-slate-400">Analyzes whale wallets and PolyVision data to suggest new strategies.</p>
-            </div>
-            <div className="text-right text-xs text-slate-500">
-              <div>Last insight</div>
-              <div className="text-sm text-slate-300">{finLastUpdated || '—'}</div>
-            </div>
-          </div>
-          {parsedFinInsight ? (
-            <div className="mt-4 grid gap-6 md:grid-cols-2">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-slate-500">Top wallets</p>
-                <div className="mt-2 space-y-2 text-sm text-slate-200">
-                  {parsedFinInsight.wallets.slice(0, 4).map((line, idx) => (
-                    <p key={idx} className="rounded-lg border border-slate-800 bg-slate-950/60 p-2">{line}</p>
-                  ))}
+      <section>
+        <h2 className="text-2xl font-semibold">Utility Agents</h2>
+        <div className="mt-4 space-y-4">
+          {/* Fin Research Agent */}
+          {finAgent && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-emerald-400">Research Agent</p>
+                  <h3 className="text-2xl font-semibold">Fin</h3>
+                  <p className="text-sm text-slate-400 mt-1">Analyzes whale wallets and PolyVision data to suggest new strategies.</p>
+                </div>
+                <div className="text-right text-xs text-slate-500 shrink-0">
+                  <div>Last insight</div>
+                  <div className="flex items-center justify-end gap-2 mt-0.5">
+                    {finHeartbeat && <span className={`h-2 w-2 rounded-full ${statusColor(finHeartbeat.status || '')}`} />}
+                    <span className="text-sm text-slate-300">{finLastUpdated || 'No heartbeat yet'}</span>
+                  </div>
                 </div>
               </div>
-              <div>
-                <p className="text-xs uppercase tracking-wide text-slate-500">Hot bets</p>
-                <div className="mt-2 space-y-2 text-sm text-slate-200">
-                  {parsedFinInsight.bets.slice(0, 4).map((line, idx) => (
-                    <p key={idx} className="rounded-lg border border-slate-800 bg-slate-950/60 p-2">{line}</p>
-                  ))}
-                  {parsedFinInsight.bets.length === 0 && <p className="text-xs text-slate-500">No hot bets flagged.</p>}
+              {parsedFinInsight ? (
+                <div className="mt-4 grid gap-6 md:grid-cols-2">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Top wallets</p>
+                    <div className="mt-2 space-y-2 text-sm text-slate-200">
+                      {parsedFinInsight.wallets.slice(0, 4).map((line, idx) => (
+                        <p key={idx} className="rounded-lg border border-slate-800 bg-slate-950/60 p-2">{line}</p>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Hot bets</p>
+                    <div className="mt-2 space-y-2 text-sm text-slate-200">
+                      {parsedFinInsight.bets.slice(0, 4).map((line, idx) => (
+                        <p key={idx} className="rounded-lg border border-slate-800 bg-slate-950/60 p-2">{line}</p>
+                      ))}
+                      {parsedFinInsight.bets.length === 0 && <p className="text-xs text-slate-500">No hot bets flagged.</p>}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">{"Fin hasn't published an insight yet."}</p>
+              )}
             </div>
-          ) : (
-            <p className="mt-4 text-sm text-slate-500">Fin hasn’t published an insight yet.</p>
           )}
-        </section>
-      )}
 
-      {copyTraderStrategy && (
-        <section className="rounded-2xl border border-emerald-900/40 bg-slate-900/80 p-6 shadow-[0_0_25px_rgba(16,185,129,0.05)]">
-          <div className="flex flex-col gap-6 xl:flex-row">
-            <div className="xl:w-1/3 space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="h-16 w-16 rounded-full bg-slate-950 p-2 overflow-hidden">
-                  <Image src="/avatars/copy-trader.svg" alt="Copy Trader avatar" width={64} height={64} className="h-full w-full rounded-full object-cover" />
-                </div>
+          {/* Copy Trader Agent */}
+          {copyTraderStrategy && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
                   <p className="text-xs uppercase tracking-wide text-emerald-400">Copy Trader</p>
-                  <h2 className="text-2xl font-semibold">{copyTraderStrategy.name}</h2>
-                  <p className="text-slate-400 text-sm">Mirrors prioritized whale wallets inside crypto markets.</p>
+                  <h3 className="text-2xl font-semibold">{copyTraderStrategy.name}</h3>
+                  <p className="text-sm text-slate-400 mt-1">Mirrors prioritized whale wallets across all Polymarket categories.</p>
+                </div>
+                <div className="text-right text-xs text-slate-500 shrink-0">
+                  <div>Last signal</div>
+                  <div className="text-sm text-slate-300 mt-0.5">{copyTraderLastSignal ? formatTs(copyTraderLastSignal.created_at) : 'No signals yet'}</div>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+
+              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
                 <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
                   <div className="text-xs uppercase text-slate-500">Equity</div>
                   <div className="text-lg font-semibold">${copyTraderStrategy.equity.toFixed(2)}</div>
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
                   <div className="text-xs uppercase text-slate-500">PnL</div>
-                  <div className="text-lg font-semibold text-emerald-300">${copyTraderStrategy.pnl.toFixed(2)}</div>
+                  <div className={`text-lg font-semibold ${copyTraderStrategy.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{copyTraderStrategy.pnl >= 0 ? '+' : ''}${copyTraderStrategy.pnl.toFixed(2)}</div>
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
                   <div className="text-xs uppercase text-slate-500">Trades</div>
@@ -667,7 +655,7 @@ export default async function Home() {
                   <div className="text-lg font-semibold">{copyTraderWinRate.toFixed(1)}%</div>
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-                  <div className="text-xs uppercase text-slate-500">Markets mirrored</div>
+                  <div className="text-xs uppercase text-slate-500">Markets</div>
                   <div className="text-lg font-semibold">{copyTraderUniqueMarkets}</div>
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
@@ -675,50 +663,55 @@ export default async function Home() {
                   <div className="text-lg font-semibold">${copyTraderAvgNotional.toFixed(2)}</div>
                 </div>
               </div>
-              <p className="text-xs text-slate-500">Last signal: {copyTraderLastSignal ? formatTs(copyTraderLastSignal.created_at) : '—'}</p>
-              <div className="flex flex-wrap gap-3">
+
+              <div className="mt-4 grid gap-6 md:grid-cols-2">
+                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-base font-semibold">Latest Whale Signals</h4>
+                    <span className="text-xs text-slate-500">{copyTraderRecentSignals.length ? 'Live feed' : 'Waiting'}</span>
+                  </div>
+                  <div className="mt-3 space-y-3 max-h-[280px] overflow-y-auto pr-1">
+                    {copyTraderRecentSignals.map((signal) => (
+                      <div key={signal.id} className="rounded-lg border border-slate-800/70 bg-slate-900/70 p-3">
+                        <p className="text-sm text-slate-100">{signal.message ?? 'Copy-trade signal'}</p>
+                        <p className="text-xs text-slate-500 mt-1">{formatTs(signal.created_at)}</p>
+                      </div>
+                    ))}
+                    {copyTraderRecentSignals.length === 0 && <div className="text-sm text-slate-500">No whale alerts logged yet.</div>}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4" id="copy-trader-trades">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-base font-semibold">Recent Copied Trades</h4>
+                    <span className="text-xs text-slate-500">{copyTraderTrades.length} total</span>
+                  </div>
+                  {copyTraderTrades.length > 0 ? (
+                    <div className="mt-3">
+                      <CopyTraderTradesTable trades={copyTraderTrades} />
+                    </div>
+                  ) : (
+                    <div className="mt-3 text-sm text-slate-500">No copy-trade executions yet.</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-3">
                 <Link href={`/strategy/${copyTraderStrategy.id}`} prefetch={false} className="rounded-full bg-emerald-500/20 px-4 py-2 text-sm text-emerald-100 hover:bg-emerald-500/30 transition">
                   Open strategy detail
                 </Link>
-                <Link href="#copy-trader-trades" className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:text-white">
+                <Link href="#copy-trader-trades" className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:text-white transition">
                   Jump to trades
                 </Link>
                 <CopyTraderWatchlist wallets={copyTraderWatchlist} />
               </div>
             </div>
-            <div className="flex-1 grid gap-6 md:grid-cols-2">
-              <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-base font-semibold">Latest Whale Signals</h3>
-                  <span className="text-xs text-slate-500">{copyTraderRecentSignals.length ? 'Live feed' : 'Waiting'}</span>
-                </div>
-                <div className="mt-3 space-y-3 max-h-[280px] overflow-y-auto pr-1">
-                  {copyTraderRecentSignals.map((signal) => (
-                    <div key={signal.id} className="rounded-lg border border-slate-800/70 bg-slate-900/70 p-3">
-                      <p className="text-sm text-slate-100">{signal.message ?? 'Copy-trade signal'}</p>
-                      <p className="text-xs text-slate-500 mt-1">{formatTs(signal.created_at)}</p>
-                    </div>
-                  ))}
-                  {copyTraderRecentSignals.length === 0 && <div className="text-sm text-slate-500">No whale alerts logged yet.</div>}
-                </div>
-              </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4" id="copy-trader-trades">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-base font-semibold">Recent Copied Trades</h3>
-                  <span className="text-xs text-slate-500">{copyTraderTrades.length} total</span>
-                </div>
-                {copyTraderTrades.length > 0 ? (
-                  <div className="mt-3">
-                    <CopyTraderTradesTable trades={copyTraderTrades} />
-                  </div>
-                ) : (
-                  <div className="mt-3 text-sm text-slate-500">No copy-trade executions yet.</div>
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
+          )}
+
+          {utilityAgents.length === 0 && !finAgent && !copyTraderStrategy && (
+            <p className="text-slate-400">No utility agents registered yet.</p>
+          )}
+        </div>
+      </section>
 
       <section id="events">
         <div className="flex items-center justify-between">
