@@ -99,11 +99,56 @@ export async function placeOrder(params: PlaceOrderParams) {
 }
 
 /**
- * Fetches market details including token IDs and tick size.
+ * Fetches market details including token IDs and tick size from the CLOB.
  */
 export async function getMarket(conditionId: string) {
   const client = await createPolyClient();
   return client.getMarket(conditionId);
+}
+
+const GAMMA_API = "https://gamma-api.polymarket.com";
+
+/**
+ * Resolves a Polymarket slug to token IDs (YES and NO) via the Gamma API.
+ *
+ * @returns { yesTokenId, noTokenId, conditionId, negRisk, tickSize } or null if not found
+ */
+export async function resolveTokenIds(slug: string): Promise<{
+  yesTokenId: string;
+  noTokenId: string;
+  conditionId: string;
+  negRisk: boolean;
+  tickSize: string;
+} | null> {
+  try {
+    const res = await fetch(`${GAMMA_API}/markets/slug/${encodeURIComponent(slug)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+
+    // clobTokenIds is a JSON string like '["yesTokenId","noTokenId"]'
+    let tokenIds: string[] = [];
+    if (typeof data.clobTokenIds === "string") {
+      try {
+        tokenIds = JSON.parse(data.clobTokenIds);
+      } catch {
+        return null;
+      }
+    } else if (Array.isArray(data.clobTokenIds)) {
+      tokenIds = data.clobTokenIds;
+    }
+
+    if (tokenIds.length < 2) return null;
+
+    return {
+      yesTokenId: tokenIds[0],
+      noTokenId: tokenIds[1],
+      conditionId: data.conditionId ?? "",
+      negRisk: data.negRisk === true,
+      tickSize: String(data.orderPriceMinTickSize ?? "0.01"),
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**

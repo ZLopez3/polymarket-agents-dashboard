@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase, verifyCronSecret, unauthorizedResponse, fetchJson } from '../_lib/supabase'
 import { checkSafeguards, logTradeEvent } from '../_lib/safeguards'
-import { placeOrder } from '@/lib/polymarket'
+import { placeOrder, resolveTokenIds } from '@/lib/polymarket'
 
 const BASE = 'https://gzydspfquuaudqeztorw.supabase.co/functions/v1/agent-api'
 
@@ -113,8 +113,19 @@ export async function GET(request: Request) {
           continue
         }
 
-        // Attempt live order if tokenId is available
-        const tokenId = w.token_id || null
+        // Resolve CLOB token IDs from Gamma API using slug
+        let tokenId: string | null = null
+        let tickSize = '0.01'
+        let negRisk = false
+        if (w.market_slug || w.slug) {
+          const tokens = await resolveTokenIds(w.market_slug || w.slug)
+          if (tokens) {
+            tokenId = side === 'YES' ? tokens.yesTokenId : tokens.noTokenId
+            tickSize = tokens.tickSize
+            negRisk = tokens.negRisk
+          }
+        }
+
         if (tokenId) {
           try {
             await logTradeEvent(supabase, {
@@ -130,6 +141,8 @@ export async function GET(request: Request) {
               price: w.price ?? 0.5,
               size: notional,
               side: side === 'YES' ? 'BUY' : 'SELL',
+              tickSize,
+              negRisk,
             })
 
             await logTradeEvent(supabase, {
