@@ -45,10 +45,27 @@ export async function POST(
     }
   }
 
+  // --- Build the update payload ---
+  const updatePayload: Record<string, unknown> = { trading_mode: mode };
+
+  // When switching to live, reset the portfolio to start fresh with capital_allocation
+  if (mode === "live") {
+    const { data: current } = await supabaseAdmin
+      .from("strategies")
+      .select("capital_allocation, paper_capital")
+      .eq("id", strategyId)
+      .single();
+
+    const startingCapital = current?.capital_allocation ?? current?.paper_capital ?? 1000;
+    updatePayload.paper_cash = startingCapital;
+    updatePayload.paper_pnl = 0;
+    updatePayload.paper_positions = 0;
+  }
+
   // --- Update the strategy ---
   const { data, error } = await supabaseAdmin
     .from("strategies")
-    .update({ trading_mode: mode })
+    .update(updatePayload)
     .eq("id", strategyId)
     .select("id, name, trading_mode")
     .single();
@@ -62,7 +79,9 @@ export async function POST(
     strategy_id: strategyId,
     event: "mode_change",
     mode,
-    result: `Switched to ${mode}`,
+    result: mode === "live"
+      ? `Switched to live – portfolio reset to $${updatePayload.paper_cash}`
+      : `Switched to ${mode}`,
   });
 
   return NextResponse.json({ strategy: data });
