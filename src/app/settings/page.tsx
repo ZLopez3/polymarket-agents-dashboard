@@ -92,14 +92,12 @@ export default async function SettingsPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white p-8 space-y-6">
+      <Link href="/" className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-white transition-colors">
+        ← Back to Dashboard
+      </Link>
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-semibold">Strategy Settings</h1>
-        <div className="flex items-center gap-4">
-          <KillSwitch hasLiveStrategies={strategies.some(s => s.trading_mode === 'live')} />
-          <Link href="/" className="text-slate-400 hover:text-white">
-            ← Back
-          </Link>
-        </div>
+        <KillSwitch hasLiveStrategies={strategies.some(s => s.trading_mode === 'live')} />
       </div>
 
       <div className="grid gap-6">
