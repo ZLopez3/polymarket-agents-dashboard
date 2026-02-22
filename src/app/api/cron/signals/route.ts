@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase, verifyCronSecret, unauthorizedResponse, fetchJson } from '../_lib/supabase'
 import { checkSafeguards, logTradeEvent } from '../_lib/safeguards'
-import { placeOrder } from '@/lib/polymarket'
+import { placeOrder, resolveTokenIds } from '@/lib/polymarket'
 
 const POLY_AGENT_API_BASE = 'https://gzydspfquuaudqeztorw.supabase.co/functions/v1/agent-api'
 const ORDER_AMOUNT_USD = Number(process.env.ORDER_AMOUNT_USD || 20)
@@ -40,6 +40,8 @@ export async function GET(request: Request) {
     trade: { market: string; side: string; notional: number; pnl: number; market_id?: string | null; market_slug?: string | null; closes_at?: string | null; is_resolved?: boolean },
     agentId: string | null,
     tokenId?: string | null,
+    tickSize?: string,
+    negRisk?: boolean,
   ) {
     const mode = strategyRow.trading_mode ?? 'paper'
     const strategyId = strategyRow.id
@@ -85,6 +87,8 @@ export async function GET(request: Request) {
             price: trade.side === 'YES' ? 0.5 : 0.5,
             size: trade.notional,
             side: trade.side as 'BUY' | 'SELL',
+            tickSize: tickSize || '0.01',
+            negRisk: negRisk || false,
           })
 
           await logTradeEvent(supabase, {
@@ -177,11 +181,26 @@ export async function GET(request: Request) {
         const size = Number((baseSize * jitter).toFixed(2))
         const pnl = Number((size * (1.0 - price)).toFixed(2))
 
+        // Resolve CLOB token IDs from Gamma API using slug
+        let bondTokenId: string | null = null
+        let bondTickSize = '0.01'
+        let bondNegRisk = false
+        if (pick.slug) {
+          const tokens = await resolveTokenIds(pick.slug)
+          if (tokens) {
+            bondTokenId = side === 'YES' ? tokens.yesTokenId : tokens.noTokenId
+            bondTickSize = tokens.tickSize
+            bondNegRisk = tokens.negRisk
+          }
+        }
+
         await executeTrade(
           bondRow,
           { market: pick.title, side, notional: size, pnl, market_id: pick.market_id, market_slug: pick.slug, closes_at: pick.closes_at, is_resolved: pick.is_resolved ?? false },
           agentMap[bondRow.id] || null,
-          pick.token_id || null,
+          bondTokenId,
+          bondTickSize,
+          bondNegRisk,
         )
 
         await supabase.from('events').insert({
@@ -230,6 +249,19 @@ export async function GET(request: Request) {
           } catch { /* ignore */ }
         }
 
+        // Resolve CLOB token IDs from Gamma API using slug
+        let tokenId: string | null = null
+        let tickSize = '0.01'
+        let negRisk = false
+        if (slug) {
+          const tokens = await resolveTokenIds(slug)
+          if (tokens) {
+            tokenId = side === 'YES' ? tokens.yesTokenId : tokens.noTokenId
+            tickSize = tokens.tickSize
+            negRisk = tokens.negRisk
+          }
+        }
+
         // Apply resolution window filter
         const aiMaxResDays = s.max_resolution_days ?? 0
         const closesAt = (details?.closes_at as string) || null
@@ -241,7 +273,9 @@ export async function GET(request: Request) {
           aiRow,
           { market: pick.title, side, notional: size, pnl, market_id: (details?.market_id as string) || null, market_slug: slug || null, closes_at: (details?.closes_at as string) || null, is_resolved: (details?.is_resolved as boolean) ?? false },
           agentMap[aiRow.id] || null,
-          (details?.token_id as string) || null,
+          tokenId,
+          tickSize,
+          negRisk,
         )
 
         await supabase.from('events').insert({
