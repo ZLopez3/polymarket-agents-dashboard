@@ -220,11 +220,11 @@ export async function GET(request: Request) {
 
       results.push(`${mode.toUpperCase()}: ${w.market_title} ${side}`)
     }
+
+    console.log(`[copy-trader] Summary: ${rows.length} fetched, ${matchedWallet} wallet-matched, ${passedResolution} passed-resolution, ${results.length} traded`)
+
+    return NextResponse.json({ ok: true, mode, trades: results.length, results, diagnostics: { fetched: rows.length, matchedWallet, passedResolution } })
   } catch (err) {
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 })
   }
-
-  console.log(`[copy-trader] Summary: ${rows.length} fetched, ${matchedWallet} wallet-matched, ${passedResolution} passed-resolution, ${results.length} traded`)
-
-  return NextResponse.json({ ok: true, mode, trades: results.length, results, diagnostics: { fetched: rows.length, matchedWallet, passedResolution } })
 }
