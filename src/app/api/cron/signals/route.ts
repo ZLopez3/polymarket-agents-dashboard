@@ -246,21 +246,24 @@ export async function GET(request: Request) {
         const size = Number((baseSize * jitter).toFixed(2))
         const pnl = Number((size * (fairValue - price)).toFixed(2))
 
-        const slug = pick.polymarketEventSlug || pick.slug
+        // Use market-level slug (not event slug) for Gamma lookups
+        const marketSlug = pick.slug
+        const eventSlug = pick.polymarketEventSlug
         let details: Record<string, unknown> | null = null
-        if (slug) {
+        // Try market slug first for agent API details, fall back to event slug
+        for (const s of [marketSlug, eventSlug].filter(Boolean)) {
           try {
-            const d = await fetchJson(`${POLY_AGENT_API_BASE}?action=market&slug=${encodeURIComponent(slug)}`)
-            details = d.data || null
-          } catch { /* ignore */ }
+            const d = await fetchJson(`${POLY_AGENT_API_BASE}?action=market&slug=${encodeURIComponent(s)}`)
+            if (d.data) { details = d.data; break }
+          } catch { /* try next */ }
         }
 
-        // Resolve CLOB token IDs from Gamma API using slug
+        // Resolve CLOB token IDs from Gamma API using market-level slug only
         let tokenId: string | null = null
         let tickSize = '0.01'
         let negRisk = false
-        if (slug) {
-          const tokens = await resolveTokenIds(slug)
+        if (marketSlug) {
+          const tokens = await resolveTokenIds(marketSlug)
           if (tokens) {
             tokenId = side === 'YES' ? tokens.yesTokenId : tokens.noTokenId
             tickSize = tokens.tickSize
@@ -277,7 +280,7 @@ export async function GET(request: Request) {
 
         await executeTrade(
           aiRow,
-          { market: pick.title, side, notional: size, pnl, market_id: (details?.market_id as string) || null, market_slug: slug || null, closes_at: (details?.closes_at as string) || null, is_resolved: (details?.is_resolved as boolean) ?? false },
+          { market: pick.title, side, notional: size, pnl, market_id: (details?.market_id as string) || null, market_slug: marketSlug || eventSlug || null, closes_at: (details?.closes_at as string) || null, is_resolved: (details?.is_resolved as boolean) ?? false },
           agentMap[aiRow.id] || null,
           tokenId,
           tickSize,
