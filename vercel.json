@@ -1,5 +1,5 @@
 {
-  "regions": ["lhr1"],
+  "regions": ["hnd1"],
   "functions": {
     "src/app/api/cron/signals/route.ts": {
       "maxDuration": 60
