@@ -14,6 +14,9 @@ export interface Strategy {
   max_orders_per_minute?: number | null
   daily_loss_limit?: number | null
   capital_allocation?: number | null
+  paper_cash?: number | null
+  paper_pnl?: number | null
+  paper_positions?: number | null
 }
 
 export interface StrategySettings {
@@ -48,6 +51,9 @@ export interface Trade {
   market_id?: string | null
   market_slug?: string | null
   is_resolved?: boolean | null
+  status?: string | null
+  error?: string | null
+  trading_mode?: string | null
 }
 
 export interface AgentEvent {
@@ -80,6 +86,7 @@ export interface AgentRow extends Agent {
   cash: number
   positions: number
   trades: number
+  mode: string
 }
 export interface TradeLog {
   id: string

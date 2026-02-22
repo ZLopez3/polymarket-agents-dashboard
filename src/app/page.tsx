@@ -121,12 +121,21 @@ export default async function Home() {
   }
 
   const strategyStats: StrategyStats[] = strategies.map((strategy) => {
+    const isLive = strategy.trading_mode === 'live'
     const strategyTrades = trades.filter((trade) => trade.strategy_id === strategy.id)
-    const pnl = strategyTrades.reduce((acc, trade) => acc + (Number(trade.pnl) || 0), 0)
     const notional = strategyTrades.reduce((acc, trade) => acc + (Number(trade.notional) || 0), 0)
     const tradeCount = strategyTrades.length
-    const base = Number(strategy.paper_capital ?? 1000)
-    const equity = base + pnl
+
+    // For live strategies, use the reset portfolio values from the DB
+    // For paper strategies, compute from historical trades as before
+    const paperPnl = strategyTrades.reduce((acc, trade) => acc + (Number(trade.pnl) || 0), 0)
+    const base = Number(strategy.paper_capital ?? strategy.capital_allocation ?? 1000)
+
+    const pnl = isLive ? Number(strategy.paper_pnl ?? 0) : paperPnl
+    const equity = isLive
+      ? Number(strategy.paper_cash ?? base) + Number(strategy.paper_pnl ?? 0)
+      : base + paperPnl
+
     return { ...strategy, pnl, notional, tradeCount, equity, base }
   })
 
@@ -159,9 +168,12 @@ export default async function Home() {
 
   const agentRows: AgentRow[] = agents.map((agent) => {
     const strat = agent.strategy_id ? strategyMap[agent.strategy_id] : undefined
+    const isLive = strat?.trading_mode === 'live'
     const sTrades = trades.filter((trade) => trade.strategy_id === agent.strategy_id)
     const notional = sTrades.reduce((acc, trade) => acc + (Number(trade.notional) || 0), 0)
-    const cash = Math.max((strat?.base ?? 1000) - notional + (strat?.pnl ?? 0), 0)
+    const cash = isLive
+      ? Number(strat?.paper_cash ?? strat?.base ?? 1000)
+      : Math.max((strat?.base ?? 1000) - notional + (strat?.pnl ?? 0), 0)
     const positions = new Set(sTrades.map((trade) => trade.market)).size
     return {
       ...agent,
@@ -169,7 +181,8 @@ export default async function Home() {
       pnl: strat?.pnl ?? 0,
       cash,
       positions,
-      trades: sTrades.length,
+      trades: isLive ? 0 : sTrades.length,
+      mode: strat?.trading_mode ?? 'paper',
     }
   })
 
@@ -180,7 +193,8 @@ export default async function Home() {
 
   const leaderboardRows = agentRows.filter((agent) => (agent.agent_type ?? '').toLowerCase() !== 'utility')
   const totalPositions = new Set(trades.map((trade) => trade.market)).size
-  const recentTrades = trades.slice(0, 20)
+  const recentTrades = trades.slice(0, 25)
+  const recentEvents = events.slice(0, 25)
 
   const finAgent = agents.find((agent) => agent.name === 'Fin') ?? null
   const finHeartbeat = finAgent ? latestHeartbeatMap[finAgent.id] : undefined
@@ -354,12 +368,8 @@ export default async function Home() {
     },
   ]
 
-  const indicator = (trade: Trade) => (
-    <span
-      className={`inline-block h-3 w-3 rounded-full ${resolutionColor(trade, now)}`}
-      title={resolutionTitle(trade, now)}
-    />
-  )
+  const indicator = (trade: Trade) =>
+    trade.is_resolved ? <span title="Resolved">{'✅'}</span> : <span title="Unresolved">{'❌'}</span>
 
   return (
     <main className="min-h-screen bg-slate-950 text-white p-8 space-y-8">
@@ -392,6 +402,7 @@ export default async function Home() {
             <thead className="bg-slate-900">
               <tr>
                 <th className="px-4 py-2 text-left">Agent</th>
+                <th className="px-4 py-2 text-left">Mode</th>
                 <th className="px-4 py-2 text-left">Portfolio</th>
                 <th className="px-4 py-2 text-left">PnL</th>
                 <th className="px-4 py-2 text-left">Cash</th>
@@ -403,8 +414,15 @@ export default async function Home() {
               {leaderboardRows.map((agent) => (
                 <tr key={agent.id} className="border-t border-slate-800">
                   <td className="px-4 py-2">{agent.name}</td>
+                  <td className="px-4 py-2">
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase ${
+                      agent.mode === 'live' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+                    }`}>
+                      {agent.mode}
+                    </span>
+                  </td>
                   <td className="px-4 py-2">${agent.portfolio.toFixed(2)}</td>
-                  <td className="px-4 py-2">${agent.pnl.toFixed(2)}</td>
+                  <td className={`px-4 py-2 ${agent.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>${agent.pnl.toFixed(2)}</td>
                   <td className="px-4 py-2">${agent.cash.toFixed(2)}</td>
                   <td className="px-4 py-2">{agent.positions}</td>
                   <td className="px-4 py-2">{agent.trades}</td>
@@ -627,7 +645,14 @@ export default async function Home() {
       )}
 
       <section id="events">
-        <h1 className="text-2xl font-semibold">Recent Events</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold">Recent Events</h1>
+          {events.length > 25 && (
+            <Link href="/events" className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
+              View all {events.length}+ events &rarr;
+            </Link>
+          )}
+        </div>
         <div className="mt-4 overflow-x-auto rounded-lg border border-slate-800">
           <table className="w-full text-sm">
             <thead className="bg-slate-900">
@@ -640,16 +665,16 @@ export default async function Home() {
               </tr>
             </thead>
             <tbody>
-              {events.map((event) => (
+              {recentEvents.map((event) => (
                 <tr key={event.id} className="border-t border-slate-800">
                   <td className="px-4 py-2">{(event.agent_id && agentNameMap[event.agent_id]) || event.agent_id || 'System'}</td>
                   <td className="px-4 py-2">{event.event_type}</td>
                   <td className="px-4 py-2">{event.severity}</td>
-                  <td className="px-4 py-2">{event.message}</td>
+                  <td className="px-4 py-2 max-w-[400px] truncate" title={event.message}>{event.message}</td>
                   <td className="px-4 py-2">{formatTs(event.created_at)}</td>
                 </tr>
               ))}
-              {events.length === 0 && (
+              {recentEvents.length === 0 && (
                 <tr>
                   <td className="px-4 py-4 text-slate-400" colSpan={5}>
                     No events recorded yet.
@@ -662,7 +687,14 @@ export default async function Home() {
       </section>
 
       <section>
-        <h1 className="text-2xl font-semibold">Recent Trades</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold">Recent Trades</h1>
+          {trades.length > 25 && (
+            <Link href="/trades" className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
+              View all {trades.length}+ trades &rarr;
+            </Link>
+          )}
+        </div>
         <div className="mt-4 overflow-x-auto rounded-lg border border-slate-800">
           <table className="w-full text-sm">
             <thead className="bg-slate-900">
@@ -670,6 +702,8 @@ export default async function Home() {
                 <th className="px-4 py-2 text-left">Strategy</th>
                 <th className="px-4 py-2 text-left">Market</th>
                 <th className="px-4 py-2 text-left">Side</th>
+                <th className="px-4 py-2 text-left">Mode</th>
+                <th className="px-4 py-2 text-left">Status</th>
                 <th className="px-4 py-2 text-left">Notional</th>
                 <th className="px-4 py-2 text-left">Resolves</th>
                 <th className="px-4 py-2 text-left">Resolved</th>
@@ -678,10 +712,33 @@ export default async function Home() {
             </thead>
             <tbody>
               {recentTrades.map((trade) => (
-                <tr key={trade.id} className="border-t border-slate-800">
+                <tr key={trade.id} className={`border-t border-slate-800 ${trade.status === 'failed' ? 'bg-red-950/20' : ''}`}>
                   <td className="px-4 py-2">{strategyMap[trade.strategy_id]?.name || trade.strategy_id}</td>
-                  <td className="px-4 py-2">{trade.market}</td>
+                  <td className="px-4 py-2 max-w-[200px] truncate" title={trade.market}>{trade.market}</td>
                   <td className="px-4 py-2">{trade.side}</td>
+                  <td className="px-4 py-2">
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase ${
+                      trade.trading_mode === 'live' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+                    }`}>
+                      {trade.trading_mode ?? 'paper'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2">
+                    {trade.status === 'failed' ? (
+                      <span className="group relative cursor-help rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase text-red-400">
+                        FAILED
+                        {trade.error && (
+                          <span className="absolute bottom-full left-0 z-10 mb-1 hidden w-64 rounded bg-slate-800 px-3 py-2 text-xs font-normal normal-case text-slate-200 shadow-lg group-hover:block">
+                            {trade.error}
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase text-emerald-400">
+                        {trade.status ?? 'filled'}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-2">${Number(trade.notional || 0).toFixed(2)}</td>
                   <td className="px-4 py-2">{formatDate(trade.closes_at)}</td>
                   <td className="px-4 py-2">{indicator(trade)}</td>
@@ -690,7 +747,7 @@ export default async function Home() {
               ))}
               {recentTrades.length === 0 && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={7}>
+                  <td className="px-4 py-4 text-slate-400" colSpan={9}>
                     No trades recorded yet.
                   </td>
                 </tr>
