@@ -95,8 +95,10 @@ export async function GET(request: Request) {
     const leaderboard = await fetchPolyVision('/v1/leaderboard', '?sort_by=rank')
     const hotBets = await fetchPolyVision('/v1/hot-bets', `?limit=${FIN_HOT_BETS}`)
 
-    const walletSummary = shortlistWallets(leaderboard.entries || [], FIN_TOP_WALLETS)
-    const betsSummary = summarizeHotBets(hotBets?.bets || [], FIN_HOT_BETS)
+    const walletEntries = leaderboard.entries || []
+    const walletSummary = shortlistWallets(walletEntries, FIN_TOP_WALLETS)
+    const hotBetEntries = hotBets?.bets || []
+    const betsSummary = summarizeHotBets(hotBetEntries, FIN_HOT_BETS)
 
     const message = [
       `Fin Insight (${nowLabel})`,
@@ -115,7 +117,79 @@ export async function GET(request: Request) {
       message,
     })
 
-    return NextResponse.json({ ok: true, message: 'Fin insight posted' })
+    // --- Structured recs for execution agents ---
+
+    // 1. Wallet recommendations (24h TTL)
+    const topWallets = walletEntries
+      .filter((e: WalletEntry) => e.win_rate >= 50 || (e.copy_score ?? 0) >= 8)
+      .slice(0, 10)
+    if (topWallets.length > 0) {
+      const walletRecs = topWallets.map((e: WalletEntry) => ({
+        recommendation_type: 'wallet',
+        payload: {
+          address: (e.wallet_address || '').toLowerCase(),
+          username: e.username || null,
+          win_rate: e.win_rate,
+          copy_score: e.copy_score ?? null,
+          categories: e.categories || {},
+        },
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      }))
+      await supabase.from('fin_recommendations').insert(walletRecs)
+    }
+
+    // 2. Hot bet recommendations (12h TTL)
+    const topBets = hotBetEntries.slice(0, 10)
+    if (topBets.length > 0) {
+      const hotBetRecs = topBets.map((b: HotBet) => ({
+        recommendation_type: 'hot_bet',
+        payload: {
+          market_title: b.market_title,
+          outcome: b.outcome,
+          current_price: b.current_price,
+          ev: b.unrealized_pnl ?? b.pnl ?? 0,
+          wallet: b.wallet || null,
+          username: b.username || null,
+        },
+        expires_at: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
+      }))
+      await supabase.from('fin_recommendations').insert(hotBetRecs)
+    }
+
+    // 3. Tuning recommendations (12h TTL)
+    const avgWinRate = walletEntries.length
+      ? walletEntries.reduce((sum: number, e: WalletEntry) => sum + e.win_rate, 0) / walletEntries.length
+      : 65
+    const highConfidence = avgWinRate > 72
+    const lowConfidence = avgWinRate < 58
+
+    const tuningPayload: Record<string, number> = {}
+    if (highConfidence) {
+      tuningPayload.certainty_delta = -0.02
+      tuningPayload.size_multiplier_delta = 0.1
+    } else if (lowConfidence) {
+      tuningPayload.certainty_delta = 0.02
+      tuningPayload.size_multiplier_delta = -0.1
+    }
+    if (Object.keys(tuningPayload).length > 0) {
+      tuningPayload.avg_win_rate = avgWinRate
+      await supabase.from('fin_recommendations').insert({
+        recommendation_type: 'tuning',
+        payload: tuningPayload,
+        expires_at: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
+      })
+    }
+
+    // Cleanup expired recs
+    await supabase
+      .from('fin_recommendations')
+      .delete()
+      .lt('expires_at', new Date().toISOString())
+
+    const recsWritten = topWallets.length + topBets.length + (Object.keys(tuningPayload).length > 0 ? 1 : 0)
+    console.log(`[fin-insights] Posted insight + ${recsWritten} structured recs (${topWallets.length} wallets, ${topBets.length} bets, ${Object.keys(tuningPayload).length > 0 ? '1 tuning' : '0 tuning'})`)
+
+    return NextResponse.json({ ok: true, message: 'Fin insight posted', recs: recsWritten })
   } catch (err) {
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 })
   }

@@ -8,22 +8,36 @@ export const preferredRegion = 'hnd1'
 
 const BASE = 'https://gzydspfquuaudqeztorw.supabase.co/functions/v1/agent-api'
 
-const WATCH_WALLETS = new Set(
+// Seed wallets -- always included as baseline regardless of Fin recommendations
+const SEED_WALLETS = new Set(
   [
     '0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee',
     '0x63ce342161250d705dc0b16df89036c8e5f9ba9a',
-    '0xdfe3fedc5c7679be42c3d393e99d4b55247b73c4',
-    '0xd1ecfa3e7d221851663f739626dcd15fca565d8e',
-    '0x5739ddf8672627ce076eff5f444610a250075f1a',
-    '0x7f3c8979d0afa00007bae4747d5347122af05613',
-    '0x4dfd481c16d9995b809780fd8a9808e8689f6e4a',
-    '0xe52c0a1327a12edc7bd54ea6f37ce00a4ca96924',
-    '0x0b219cf3d297991b58361dbebdbaa91e56b8deb6',
-    '0x85d575c99b977e9e39543747c859c83b727aaece',
-    '0xf5fe759cece500f58a431ef8dacea321f6e3e23d',
-    '0x9c667a1d1c1337c6dca9d93241d386e4ed346b66',
   ].map((w) => w.toLowerCase())
 )
+
+async function buildWatchlist(): Promise<Set<string>> {
+  const { data: walletRecs } = await supabase
+    .from('fin_recommendations')
+    .select('payload')
+    .eq('recommendation_type', 'wallet')
+    .gte('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(20)
+
+  const finWallets = new Set(
+    (walletRecs || [])
+      .map((r) => {
+        const p = r.payload as { address?: string }
+        return p.address?.toLowerCase()
+      })
+      .filter((a): a is string => Boolean(a))
+  )
+
+  const combined = new Set([...SEED_WALLETS, ...finWallets])
+  console.log(`[copy-trader] Watchlist: ${combined.size} wallets (${SEED_WALLETS.size} seed + ${finWallets.size} Fin-recommended)`)
+  return combined
+}
 
 function sizeFromTier(tier: string) {
   if (tier === 'mega') return 30
@@ -69,6 +83,8 @@ export async function GET(request: Request) {
   const results: string[] = []
 
   try {
+    const WATCH_WALLETS = await buildWatchlist()
+
     const feed = await fetchJson(`${BASE}?action=whales&limit=200`)
     const rows = feed.data || []
 

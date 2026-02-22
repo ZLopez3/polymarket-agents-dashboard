@@ -22,22 +22,32 @@ const {
 } = process.env;
 
 const BASE = 'https://gzydspfquuaudqeztorw.supabase.co/functions/v1/agent-api';
-const WATCH_WALLETS = new Set([
-  // Original pilot wallets
+
+// Seed wallets -- always included regardless of Fin recommendations
+const SEED_WALLETS = new Set([
   '0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee',
   '0x63ce342161250d705dc0b16df89036c8e5f9ba9a',
-  // High win-rate additions (PolyVision leaderboard 2026-02-20)
-  '0xdfe3fedc5c7679be42c3d393e99d4b55247b73c4', // cqs – 67.8% win rate
-  '0xd1ecfa3e7d221851663f739626dcd15fca565d8e', // Scott8153 – 84.5%
-  '0x5739ddf8672627ce076eff5f444610a250075f1a', // hopedieslast – 69.5%
-  '0x7f3c8979d0afa00007bae4747d5347122af05613', // LucasMeow – 95.1%
-  '0x4dfd481c16d9995b809780fd8a9808e8689f6e4a', // Magamyman – 66.7%
-  '0xe52c0a1327a12edc7bd54ea6f37ce00a4ca96924', // aff3 – 78.0%
-  '0x0b219cf3d297991b58361dbebdbaa91e56b8deb6', // TerreMoto – 83.7%
-  '0x85d575c99b977e9e39543747c859c83b727aaece', // warlasfutpro – 79.6%
-  '0xf5fe759cece500f58a431ef8dacea321f6e3e23d', // Stavenson – 89.2%
-  '0x9c667a1d1c1337c6dca9d93241d386e4ed346b66', // InfiniteCrypt0 – 71.1%
 ].map((w) => w.toLowerCase()));
+
+async function buildWatchlist() {
+  try {
+    const now = new Date().toISOString();
+    const url = `${SUPABASE_URL}/rest/v1/fin_recommendations?select=payload&recommendation_type=eq.wallet&expires_at=gte.${encodeURIComponent(now)}&order=created_at.desc&limit=20`;
+    const res = await fetch(url, {
+      headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+    });
+    const data = await res.json();
+    const finWallets = (data || [])
+      .map((r) => r.payload?.address?.toLowerCase())
+      .filter(Boolean);
+    const combined = new Set([...SEED_WALLETS, ...finWallets]);
+    console.log(`[copy-trader] Watchlist: ${combined.size} wallets (${SEED_WALLETS.size} seed + ${finWallets.length} Fin-recommended)`);
+    return combined;
+  } catch (err) {
+    console.error('[copy-trader] Failed to fetch Fin wallets, using seed only:', err.message);
+    return new Set([...SEED_WALLETS]);
+  }
+}
 
 const MAX_RESOLUTION_WINDOW_MS = 21 * 24 * 60 * 60 * 1000; // 21 days
 
@@ -97,6 +107,8 @@ function sizeFromTier(tier) {
 async function runOnce() {
   const strategyId = await getStrategyId();
   if (!strategyId) return;
+
+  const WATCH_WALLETS = await buildWatchlist();
 
   const feed = await fetchJson(`${BASE}?action=whales&limit=200`);
   const rows = feed.data || [];

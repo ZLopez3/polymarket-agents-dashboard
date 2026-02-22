@@ -27,6 +27,44 @@ export async function GET(request: Request) {
 
   const results: string[] = []
 
+  // --- Fetch Fin recommendations ---
+  const { data: hotBetRecs } = await supabase
+    .from('fin_recommendations')
+    .select('payload')
+    .eq('recommendation_type', 'hot_bet')
+    .gte('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(10)
+
+  const finHotMarkets = new Set(
+    (hotBetRecs || []).map((r) => (r.payload as { market_title?: string }).market_title).filter(Boolean)
+  )
+
+  const { data: tuningRecs } = await supabase
+    .from('fin_recommendations')
+    .select('payload')
+    .eq('recommendation_type', 'tuning')
+    .gte('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  const tuning = tuningRecs?.[0]?.payload as {
+    certainty_delta?: number
+    size_multiplier_delta?: number
+    avg_win_rate?: number
+  } | undefined
+
+  if (tuning) {
+    console.log(`[signals] Fin tuning active: certainty_delta=${tuning.certainty_delta ?? 0}, size_delta=${tuning.size_multiplier_delta ?? 0}, avg_win_rate=${tuning.avg_win_rate ?? '?'}`)
+    await supabase.from('events').insert({
+      event_type: 'fin_tuning_applied',
+      severity: 'info',
+      message: `Fin auto-tune applied: certainty ${(tuning.certainty_delta ?? 0) >= 0 ? '+' : ''}${tuning.certainty_delta ?? 0}, size ${(tuning.size_multiplier_delta ?? 0) >= 0 ? '+' : ''}${tuning.size_multiplier_delta ?? 0} (avg wallet win rate: ${tuning.avg_win_rate?.toFixed(1) ?? '?'}%)`,
+    })
+  }
+
+  console.log(`[signals] Fin recs: ${hotBetRecs?.length ?? 0} hot bets, ${finHotMarkets.size} unique markets, tuning: ${tuning ? 'yes' : 'no'}`)
+
   // Helper: check if a market's resolution date is within the configured window
   function withinResolutionWindow(closesAt: string | null | undefined, maxDays: number): boolean {
     if (!maxDays || maxDays <= 0) return true // 0 = no filter
@@ -165,27 +203,54 @@ export async function GET(request: Request) {
     try {
       const markets = await fetchJson(`${POLY_AGENT_API_BASE}?action=markets&limit=25&sort=volume_usd&agent_id=BondLadder-Agent`)
       const s = settingsMap[bondRow.id] || {}
-      const certainty = s.certainty_threshold ?? 0.95
+      // Apply Fin tuning deltas with safety clamps
+      const baseCertainty = s.certainty_threshold ?? 0.95
+      const certainty = Math.max(0.85, Math.min(0.99, baseCertainty + (tuning?.certainty_delta ?? 0)))
       const liquidityFloor = (s.liquidity_floor ?? 0.5) * 1_000_000
+      const baseSizeMult = s.order_size_multiplier ?? 1.0
+      const sizeMult = Math.max(0.3, Math.min(2.0, baseSizeMult + (tuning?.size_multiplier_delta ?? 0)))
       const maxResDays = s.max_resolution_days ?? 0
       const now = Date.now()
-      const candidates = (markets.data || []).filter(
+      let candidates = (markets.data || []).filter(
         (m: Record<string, unknown>) =>
           ((m.yes_price as number) >= certainty || (m.no_price as number) >= certainty) &&
           !m.is_resolved &&
           ((m.liquidity_usd as number) ?? 0) >= liquidityFloor &&
           withinResolutionWindow(m.closes_at as string | null, maxResDays) &&
-          // Skip markets whose close date has already passed (agent API may lag resolution)
           (!m.closes_at || new Date(m.closes_at as string).getTime() > now)
       )
+
+      // Prioritize Fin-recommended markets: move them to the front
+      if (finHotMarkets.size > 0 && candidates.length > 1) {
+        candidates.sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
+          const aFin = finHotMarkets.has(a.title as string) ? 1 : 0
+          const bFin = finHotMarkets.has(b.title as string) ? 1 : 0
+          return bFin - aFin
+        })
+      }
+
+      // Fallback: if no candidates from main scan, check Fin hot bets that pass certainty
+      if (candidates.length === 0 && finHotMarkets.size > 0) {
+        const allMarkets = markets.data || []
+        candidates = allMarkets.filter(
+          (m: Record<string, unknown>) =>
+            finHotMarkets.has(m.title as string) &&
+            ((m.yes_price as number) >= certainty * 0.95 || (m.no_price as number) >= certainty * 0.95) &&
+            !m.is_resolved &&
+            (!m.closes_at || new Date(m.closes_at as string).getTime() > now)
+        )
+        if (candidates.length) console.log(`[signals] BondLadder: using ${candidates.length} Fin hot bet fallback candidates`)
+      }
+
       if (candidates.length) {
-        const pick = candidates[Math.floor(Math.random() * candidates.length)]
+        const pick = candidates[Math.floor(Math.random() * Math.min(3, candidates.length))]
         const side = pick.yes_price >= pick.no_price ? 'YES' : 'NO'
         const price = side === 'YES' ? pick.yes_price : pick.no_price
-        const baseSize = ORDER_AMOUNT_USD * (s.order_size_multiplier ?? 1.0)
+        const baseSize = ORDER_AMOUNT_USD * sizeMult
         const jitter = 0.6 + Math.random() * 0.8
         const size = Number((baseSize * jitter).toFixed(2))
         const pnl = Number((size * (1.0 - price)).toFixed(2))
+        const finBoosted = finHotMarkets.has(pick.title)
 
         // Resolve CLOB token IDs from Gamma API using slug
         let bondTokenId: string | null = null
@@ -213,7 +278,7 @@ export async function GET(request: Request) {
           agent_id: agentMap[bondRow.id] || null,
           event_type: 'bond_ladder_signal',
           severity: 'info',
-          message: `Signal: ${pick.title} @ ${price} (${side}) [${bondRow.trading_mode ?? 'paper'}]`,
+          message: `Signal: ${pick.title} @ ${price} (${side}) [${bondRow.trading_mode ?? 'paper'}]${finBoosted ? ' [Fin-recommended]' : ''}`,
         })
       } else {
         results.push('BondLadder: no candidates')
@@ -229,9 +294,19 @@ export async function GET(request: Request) {
     try {
       const res = await fetchJson(`${POLY_AGENT_API_BASE}?action=ai-vs-humans&limit=25&agent_id=AIContrarian-Agent`)
       const s = settingsMap[aiRow.id] || {}
-      const threshold = s.divergence_threshold ?? 20
+      // Apply Fin tuning: divergence threshold stays in [10, 50] range
+      // Note: for divergence, a positive certainty_delta means tighter markets -> we can be less aggressive
+      const baseDiv = s.divergence_threshold ?? 20
+      const threshold = Math.max(10, Math.min(50, baseDiv))
+      const aiBaseSizeMult = s.order_size_multiplier ?? 1.0
+      const aiSizeMult = Math.max(0.3, Math.min(2.0, aiBaseSizeMult + (tuning?.size_multiplier_delta ?? 0)))
+      // Fin hot bet confirmation: lower threshold by 30% for Fin-confirmed markets
       const candidates = (res.data || []).filter(
-        (m: Record<string, unknown>) => Math.abs((m.divergence as number) || 0) >= threshold
+        (m: Record<string, unknown>) => {
+          const div = Math.abs((m.divergence as number) || 0)
+          const finConfirmed = finHotMarkets.has(m.title as string)
+          return div >= (finConfirmed ? threshold * 0.7 : threshold)
+        }
       )
       if (candidates.length) {
         const pick = candidates[Math.floor(Math.random() * candidates.length)]
@@ -241,10 +316,11 @@ export async function GET(request: Request) {
         const aiConsensus = pick.aiConsensus ?? 0.5
         const price = side === 'YES' ? yesPrice : noPrice
         const fairValue = side === 'YES' ? aiConsensus : 1 - aiConsensus
-        const baseSize = ORDER_AMOUNT_USD * (s.order_size_multiplier ?? 1.0)
+        const baseSize = ORDER_AMOUNT_USD * aiSizeMult
         const jitter = 0.6 + Math.random() * 0.8
         const size = Number((baseSize * jitter).toFixed(2))
         const pnl = Number((size * (fairValue - price)).toFixed(2))
+        const aiFin = finHotMarkets.has(pick.title)
 
         // Use market-level slug (not event slug) for Gamma lookups
         const marketSlug = pick.slug
@@ -291,7 +367,7 @@ export async function GET(request: Request) {
           agent_id: agentMap[aiRow.id] || null,
           event_type: 'ai_contrarian_signal',
           severity: 'info',
-          message: `Signal: ${pick.title} (AI ${pick.aiConsensus?.toFixed?.(2) ?? pick.aiConsensus} vs market ${pick.polymarketPrice}) [${aiRow.trading_mode ?? 'paper'}]`,
+          message: `Signal: ${pick.title} (AI ${pick.aiConsensus?.toFixed?.(2) ?? pick.aiConsensus} vs market ${pick.polymarketPrice}) [${aiRow.trading_mode ?? 'paper'}]${aiFin ? ' [Fin-confirmed]' : ''}`,
         })
 
         } // end withinResolutionWindow else
