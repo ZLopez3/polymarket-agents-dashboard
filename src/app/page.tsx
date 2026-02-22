@@ -34,7 +34,7 @@ async function fetchSummary(): Promise<SummaryData> {
     supabase.from('trades').select('*').order('executed_at', { ascending: false }).limit(500),
     supabase.from('events').select('*').order('created_at', { ascending: false }).limit(50),
     supabase.from('agent_heartbeats').select('*').order('created_at', { ascending: false }).limit(50),
-    supabase.from('events').select('*').like('event_type', 'copy_trader%').order('created_at', { ascending: false }).limit(20),
+    supabase.from('events').select('*').or('event_type.like.copy_trader%,event_type.like.copy_trade_%').order('created_at', { ascending: false }).limit(20),
     supabase.from('fin_recommendations').select('payload,created_at').eq('recommendation_type', 'wallet').gte('expires_at', new Date().toISOString()).order('created_at', { ascending: false }).limit(20),
   ])
 
@@ -288,9 +288,9 @@ export default async function Home() {
     ? events.filter((e) => e.agent_id === copyTraderAgent.id)
     : []
   const copyTraderSignals = [
-    ...copySignals,
-    ...cotAgentEvents.filter((e) => !copySignals.some((cs) => cs.id === e.id)),
-  ]
+  ...copySignals,
+  ...cotAgentEvents.filter((e) => !copySignals.some((cs) => cs.id === e.id)),
+  ].filter((e) => e.event_type !== 'copy_trader_online') // exclude heartbeats
   const copyTraderRecentSignals = copyTraderSignals.slice(0, 5)
   const copyTraderLastSignal = copyTraderSignals[0] ?? null
 
