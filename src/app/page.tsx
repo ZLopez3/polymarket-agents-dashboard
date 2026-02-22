@@ -104,16 +104,6 @@ export default async function Home() {
     return acc
   }, {})
 
-  const avatarMap: Record<string, string> = {
-    'BondLadder-Agent': '/avatars/bond-ladder.jpg',
-    'AIContrarian-Agent': '/avatars/ai-contrarian.jpg',
-    Audi: '/avatars/audi.jpg',
-    Fin: '/avatars/fin.jpg',
-    'Fin-Agent': '/avatars/fin.jpg',
-    'CopyTrader-Agent': '/avatars/copy-trader.jpg',
-    Cot: '/avatars/copy-trader.jpg',
-  }
-
   const descriptionMap: Record<string, string> = {
     'BondLadder-Agent': 'Harvests high-certainty markets for steady yield.',
     'AIContrarian-Agent': 'Fades crowd consensus using AI divergence signals.',
@@ -517,47 +507,49 @@ export default async function Home() {
       </section>
 
       <section>
-        <h1 className="text-2xl font-semibold">Execution Agents</h1>
-        <div className="mt-4 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {executionAgents.map((agent, idx) => {
+        <h2 className="text-2xl font-semibold">Execution Agents</h2>
+        <div className="mt-4 space-y-4">
+          {executionAgents.map((agent) => {
             const assignedStrategies = [...(strategyByAgent[agent.id] || [])]
             const primaryStrategy = primaryStrategyByAgent[agent.id]
-            if (primaryStrategy && !assignedStrategies.some((strategy) => strategy.id === primaryStrategy.id)) {
+            if (primaryStrategy && !assignedStrategies.some((s) => s.id === primaryStrategy.id)) {
               assignedStrategies.unshift(primaryStrategy)
             }
+            const hb = latestHeartbeatMap[agent.id]
             return (
-              <div key={agent.id} className="rounded-2xl border border-slate-800 bg-slate-900 p-6 flex flex-col items-center text-center h-[550px]">
-                <div className="h-40 w-40 mb-4">
-                  <Image
-                    src={avatarMap[agent.name] || '/avatars/bond-ladder.jpg'}
-                    alt={agent.name}
-                    width={160}
-                    height={160}
-                    className="h-full w-full object-contain"
-                    priority
-                  />
+              <div key={agent.id} className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-emerald-400">Execution Agent</p>
+                    <h3 className="text-2xl font-semibold">{agent.name}</h3>
+                    <p className="text-sm text-slate-400 mt-1">{descriptionMap[agent.name] || 'Agent running.'}</p>
+                  </div>
+                  <div className="text-right text-xs text-slate-500 shrink-0">
+                    <div>Last heartbeat</div>
+                    <div className="flex items-center justify-end gap-2 mt-0.5">
+                      {hb && <span className={`h-2 w-2 rounded-full ${statusColor(hb.status || '')}`} />}
+                      <span className="text-sm text-slate-300">{hb ? formatTs(hb.created_at) : 'No heartbeat yet'}</span>
+                    </div>
+                  </div>
                 </div>
-                <h3 className="text-xl font-semibold">{agent.name}</h3>
-                <p className="text-sm text-slate-300 mt-3">{descriptionMap[agent.name] || 'Agent running.'}</p>
-                <div className="mt-4 w-full space-y-2">
+                <div className="mt-4 space-y-2">
                   {assignedStrategies.length > 0 ? (
                     assignedStrategies.map((strategy) => {
                       const sMode = strategy.trading_mode ?? 'paper'
                       const isLive = sMode === 'live'
                       return (
-                      <Link
-                        key={strategy.id}
-                        href={`/strategy/${strategy.id}`}
-                        prefetch={false}
-                        className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs transition hover:bg-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 ${
-                          isLive
-                            ? 'border-emerald-700/50 bg-slate-950 shadow-[0_0_12px_rgba(16,185,129,0.15)] hover:border-emerald-600/60'
-                            : 'border-slate-800 bg-slate-950 hover:border-slate-700'
-                        }`}
-                        aria-label={`Open strategy ${strategy.name}`}
-                      >
-                        <div className="text-left">
-                          <div className="flex items-center gap-2">
+                        <Link
+                          key={strategy.id}
+                          href={`/strategy/${strategy.id}`}
+                          prefetch={false}
+                          className={`flex items-center justify-between rounded-lg border px-4 py-3 text-sm transition hover:bg-slate-800/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 ${
+                            isLive
+                              ? 'border-emerald-700/50 bg-slate-950/60'
+                              : 'border-slate-800 bg-slate-950/60'
+                          }`}
+                          aria-label={`Open strategy ${strategy.name}`}
+                        >
+                          <div className="flex items-center gap-3">
                             <span className="font-medium text-white/90">{strategy.name}</span>
                             <span className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase ${
                               isLive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
@@ -565,34 +557,22 @@ export default async function Home() {
                               {sMode}
                             </span>
                           </div>
-                          <div className="text-[10px] uppercase tracking-wide text-slate-500">Tap to open details</div>
-                        </div>
-                        <div className="text-slate-400 text-right leading-tight">
-                          PnL {strategy.pnl.toFixed(2)}
-                          <br />
-                          Eq {strategy.equity.toFixed(2)}
-                        </div>
-                      </Link>
+                          <div className="flex items-center gap-4 text-slate-400 text-xs font-mono">
+                            <span className={strategy.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}>PnL {strategy.pnl >= 0 ? '+' : ''}{strategy.pnl.toFixed(2)}</span>
+                            <span>Eq ${strategy.equity.toFixed(2)}</span>
+                            <span className="text-slate-500">&rarr;</span>
+                          </div>
+                        </Link>
                       )
                     })
                   ) : (
-                    <div className="text-xs text-slate-500">No strategies assigned</div>
-                  )}
-                </div>
-                <div className="mt-auto flex items-center gap-2 text-xs text-slate-400">
-                  {latestHeartbeatMap[agent.id] ? (
-                    <>
-                      <span className={`h-2 w-2 rounded-full ${statusColor(latestHeartbeatMap[agent.id].status || '')}`} />
-                      <span className="text-slate-500">{formatTs(latestHeartbeatMap[agent.id].created_at)}</span>
-                    </>
-                  ) : (
-                    <span className="text-slate-500">No heartbeat yet</span>
+                    <p className="text-sm text-slate-500">No strategies assigned.</p>
                   )}
                 </div>
               </div>
             )
           })}
-          {executionAgents.length === 0 && <div className="text-slate-400">No agents registered yet.</div>}
+          {executionAgents.length === 0 && <p className="text-slate-400">No agents registered yet.</p>}
         </div>
       </section>
 
