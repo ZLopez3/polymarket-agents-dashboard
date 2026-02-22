@@ -9,7 +9,7 @@ import type { Agent, AgentEvent, AgentHeartbeat, AgentRow, CopyTraderWallet, Str
 export const dynamic = 'force-dynamic'
 
 interface FinWalletRec {
-  payload: { address?: string; username?: string; win_rate?: number; copy_score?: number; categories?: Record<string, number> }
+  payload: { address?: string; username?: string; win_rate?: number; copy_score?: number; categories?: Record<string, number>; last_trade_date?: string | null }
   created_at: string
 }
 
@@ -268,7 +268,14 @@ export default async function Home() {
   )
   if (copyTraderStrategy) copyTraderStrategyIds.add(copyTraderStrategy.id)
 
-  const copyTraderTrades = trades.filter((t) => copyTraderStrategyIds.has(t.strategy_id))
+  const cotModeSwitchedAt = copyTraderStrategy?.mode_switched_at ? new Date(copyTraderStrategy.mode_switched_at).getTime() : 0
+  const copyTraderTrades = trades.filter((t) => {
+    if (!copyTraderStrategyIds.has(t.strategy_id)) return false
+    if (cotModeSwitchedAt && t.executed_at) {
+      return new Date(t.executed_at).getTime() >= cotModeSwitchedAt
+    }
+    return true
+  })
 
   const copyTraderTotalNotional = copyTraderTrades.reduce((acc, trade) => acc + (Number(trade.notional) || 0), 0)
   const copyTraderAvgNotional = copyTraderTrades.length ? copyTraderTotalNotional / copyTraderTrades.length : 0
@@ -288,32 +295,53 @@ export default async function Home() {
   const copyTraderLastSignal = copyTraderSignals[0] ?? null
 
 
-  // Build watchlist dynamically from Fin wallet recommendations + seed wallets
-  const seedWallets: CopyTraderWallet[] = [
-    {
-      address: '0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee',
-      label: 'Seed wallet A',
-      winRate: 60,
-      copyScore: 7,
-      tier: 'yellow',
-      lastTrade: null,
-      sourceUrl: 'https://polymarketscan.com/wallet/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee',
-      notes: 'Permanent seed wallet',
-    },
-    {
-      address: '0x63ce342161250d705dc0b16df89036c8e5f9ba9a',
-      label: 'Seed wallet B',
-      winRate: 60,
-      copyScore: 7,
-      tier: 'yellow',
-      lastTrade: null,
-      sourceUrl: 'https://polymarketscan.com/wallet/0x63ce342161250d705dc0b16df89036c8e5f9ba9a',
-      notes: 'Permanent seed wallet',
-    },
+  // Build watchlist: permanent wallets + Fin-recommended wallets
+  // Build a lookup from Fin recs so we can enrich permanent wallets with live data
+  const finRecMap = new Map<string, FinWalletRec['payload']>()
+  for (const r of finWalletRecs) {
+    if (r.payload?.address) finRecMap.set(r.payload.address.toLowerCase(), r.payload)
+  }
+
+  const permanentWallets: { address: string; label: string; defaultWinRate: number; defaultCopyScore: number; notes: string }[] = [
+    { address: '0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee', label: 'Pilot wallet A', defaultWinRate: 60, defaultCopyScore: 7, notes: 'Seed wallet' },
+    { address: '0x63ce342161250d705dc0b16df89036c8e5f9ba9a', label: 'Pilot wallet B', defaultWinRate: 60, defaultCopyScore: 7, notes: 'Seed wallet' },
+    { address: '0xdfe3fedc5c7679be42c3d393e99d4b55247b73c4', label: 'cqs', defaultWinRate: 67.8, defaultCopyScore: 10, notes: 'Leaderboard #1' },
+    { address: '0xd1ecfa3e7d221851663f739626dcd15fca565d8e', label: 'Scott8153', defaultWinRate: 84.5, defaultCopyScore: 10, notes: 'High win rate politics' },
+    { address: '0x5739ddf8672627ce076eff5f444610a250075f1a', label: 'hopedieslast', defaultWinRate: 69.5, defaultCopyScore: 10, notes: 'Balanced exposure' },
+    { address: '0x7f3c8979d0afa00007bae4747d5347122af05613', label: 'LucasMeow', defaultWinRate: 95.2, defaultCopyScore: 10, notes: 'Crypto specialist' },
+    { address: '0x4dfd481c16d9995b809780fd8a9808e8689f6e4a', label: 'Magamyman', defaultWinRate: 66.7, defaultCopyScore: 10, notes: 'Diversified' },
+    { address: '0xe52c0a1327a12edc7bd54ea6f37ce00a4ca96924', label: 'aff3', defaultWinRate: 78.0, defaultCopyScore: 10, notes: 'Steady risk profile' },
+    { address: '0x0b219cf3d297991b58361dbebdbaa91e56b8deb6', label: 'TerreMoto', defaultWinRate: 83.7, defaultCopyScore: 10, notes: 'High confidence' },
+    { address: '0x85d575c99b977e9e39543747c859c83b727aaece', label: 'warlasfutpro', defaultWinRate: 79.6, defaultCopyScore: 10, notes: 'Politics heavy' },
+    { address: '0xf5fe759cece500f58a431ef8dacea321f6e3e23d', label: 'Stavenson', defaultWinRate: 89.2, defaultCopyScore: 10, notes: 'Ultra-consistent' },
+    { address: '0x9c667a1d1c1337c6dca9d93241d386e4ed346b66', label: 'InfiniteCrypt0', defaultWinRate: 71.2, defaultCopyScore: 10, notes: 'Fast cadence' },
   ]
 
-  const finWallets: CopyTraderWallet[] = finWalletRecs
-    .filter((r) => r.payload?.address)
+  const permanentAddresses = new Set(permanentWallets.map((w) => w.address.toLowerCase()))
+
+  // Build permanent wallet entries, enriched with live Fin data when available
+  const watchlistPermanent: CopyTraderWallet[] = permanentWallets.map((pw) => {
+    const addr = pw.address.toLowerCase()
+    const fin = finRecMap.get(addr)
+    const winRate = fin?.win_rate ?? pw.defaultWinRate
+    const copyScore = fin?.copy_score ?? pw.defaultCopyScore
+    const tier = winRate >= 80 ? 'green' : winRate >= 60 ? 'yellow' : 'red'
+    const label = (fin?.username) || pw.label
+    return {
+      address: addr,
+      label,
+      winRate,
+      copyScore,
+      tier,
+      lastTrade: fin?.last_trade_date ?? null,
+      sourceUrl: `https://polyvisionx.com/wallet/${addr}`,
+      notes: fin ? `Fin-verified | ${pw.notes}` : pw.notes,
+    }
+  })
+
+  // Add Fin-discovered wallets not already in the permanent list
+  const extraFinWallets: CopyTraderWallet[] = finWalletRecs
+    .filter((r) => r.payload?.address && !permanentAddresses.has(r.payload.address.toLowerCase()))
     .map((r) => {
       const p = r.payload
       const addr = (p.address ?? '').toLowerCase()
@@ -329,16 +357,13 @@ export default async function Home() {
         winRate,
         copyScore,
         tier,
-        lastTrade: null,
+        lastTrade: p.last_trade_date ?? null,
         sourceUrl: `https://polyvisionx.com/wallet/${addr}`,
-        notes: `Fin-recommended${topCat ? ` (${topCat} focus)` : ''}`,
+        notes: `Fin-discovered${topCat ? ` (${topCat} focus)` : ''}`,
       }
     })
 
-  // Deduplicate: Fin wallets override seeds if same address
-  const seedAddresses = new Set(seedWallets.map((w) => w.address.toLowerCase()))
-  const uniqueFinWallets = finWallets.filter((w) => !seedAddresses.has(w.address.toLowerCase()))
-  const copyTraderWatchlist: CopyTraderWallet[] = [...seedWallets, ...uniqueFinWallets]
+  const copyTraderWatchlist: CopyTraderWallet[] = [...watchlistPermanent, ...extraFinWallets]
 
   const indicator = (trade: Trade) =>
     trade.is_resolved ? <span title="Resolved">{'✅'}</span> : <span title="Unresolved">{'❌'}</span>

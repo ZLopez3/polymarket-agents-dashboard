@@ -23,10 +23,20 @@ const {
 
 const BASE = 'https://gzydspfquuaudqeztorw.supabase.co/functions/v1/agent-api';
 
-// Seed wallets -- always included regardless of Fin recommendations
+// Permanent wallets -- always included regardless of Fin recommendations
 const SEED_WALLETS = new Set([
   '0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee',
   '0x63ce342161250d705dc0b16df89036c8e5f9ba9a',
+  '0xdfe3fedc5c7679be42c3d393e99d4b55247b73c4',
+  '0xd1ecfa3e7d221851663f739626dcd15fca565d8e',
+  '0x5739ddf8672627ce076eff5f444610a250075f1a',
+  '0x7f3c8979d0afa00007bae4747d5347122af05613',
+  '0x4dfd481c16d9995b809780fd8a9808e8689f6e4a',
+  '0xe52c0a1327a12edc7bd54ea6f37ce00a4ca96924',
+  '0x0b219cf3d297991b58361dbebdbaa91e56b8deb6',
+  '0x85d575c99b977e9e39543747c859c83b727aaece',
+  '0xf5fe759cece500f58a431ef8dacea321f6e3e23d',
+  '0x9c667a1d1c1337c6dca9d93241d386e4ed346b66',
 ].map((w) => w.toLowerCase()));
 
 async function buildWatchlist() {
