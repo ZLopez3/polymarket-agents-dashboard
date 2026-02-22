@@ -4,7 +4,6 @@ import { checkSafeguards, logTradeEvent } from '../_lib/safeguards'
 import { placeOrder } from '@/lib/polymarket'
 
 const BASE = 'https://gzydspfquuaudqeztorw.supabase.co/functions/v1/agent-api'
-const MAX_RESOLUTION_WINDOW_MS = 3 * 24 * 60 * 60 * 1000
 
 const WATCH_WALLETS = new Set(
   [
@@ -46,6 +45,15 @@ export async function GET(request: Request) {
 
   const mode = strategyRow.trading_mode ?? 'paper'
 
+  // Fetch strategy settings for resolution window filter
+  const { data: settingsRows } = await supabase
+    .from('strategy_settings')
+    .select('max_resolution_days')
+    .eq('strategy_id', strategyRow.id)
+    .limit(1)
+  const maxResDays = settingsRows?.[0]?.max_resolution_days ?? 0
+  const maxResolutionMs = maxResDays > 0 ? maxResDays * 24 * 60 * 60 * 1000 : 0
+
   // Get recent trade hashes to deduplicate
   const { data: recentTrades } = await supabase
     .from('trades')
@@ -66,10 +74,12 @@ export async function GET(request: Request) {
       if (!WATCH_WALLETS.has(wallet)) continue
       if (w.market_category && w.market_category.toLowerCase() !== 'crypto') continue
 
-      if (!w.closes_at) continue
-      const closesAt = new Date(w.closes_at)
-      if (Number.isNaN(closesAt.getTime())) continue
-      if (closesAt.getTime() - Date.now() > MAX_RESOLUTION_WINDOW_MS) continue
+      if (maxResolutionMs > 0) {
+        if (!w.closes_at) continue
+        const closesAt = new Date(w.closes_at)
+        if (Number.isNaN(closesAt.getTime())) continue
+        if (closesAt.getTime() - Date.now() > maxResolutionMs) continue
+      }
 
       const side = (w.outcome || '').toLowerCase().includes('no') ? 'NO' : 'YES'
       const dedupeKey = `${w.market_title}-${side}`

@@ -29,6 +29,7 @@ export interface StrategySettings {
   certainty_threshold?: number | null
   liquidity_floor?: number | null
   order_size_multiplier?: number | null
+  max_resolution_days?: number | null
 }
 
 export interface Agent {

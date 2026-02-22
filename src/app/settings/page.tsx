@@ -29,6 +29,7 @@ async function updateSettings(formData: FormData) {
   const certainty_threshold = Number(formData.get('certainty_threshold') || 0.95)
   const liquidity_floor = Number(formData.get('liquidity_floor') || 0.5)
   const order_size_multiplier = Number(formData.get('order_size_multiplier') || 1.0)
+  const max_resolution_days = Number(formData.get('max_resolution_days') || 0)
 
   // Live trading safeguard fields
   const max_position_size = Number(formData.get('max_position_size') || 500)
@@ -48,6 +49,7 @@ async function updateSettings(formData: FormData) {
     certainty_threshold,
     liquidity_floor,
     order_size_multiplier,
+    max_resolution_days,
   })
 
   await supabaseAdmin.from('strategies').update({
@@ -182,6 +184,11 @@ export default async function SettingsPage() {
                     <label className="text-sm">
                       <div className="text-slate-400">Order Size Multiplier</div>
                       <input name="order_size_multiplier" defaultValue={strategySettings.order_size_multiplier ?? 1.0} className="mt-1 w-full rounded bg-slate-800 px-3 py-2" type="number" step="0.1" />
+                    </label>
+                    <label className="text-sm">
+                      <div className="text-slate-400">Max Resolution Window (days)</div>
+                      <input name="max_resolution_days" defaultValue={strategySettings.max_resolution_days ?? 0} className="mt-1 w-full rounded bg-slate-800 px-3 py-2" type="number" step="1" min="0" />
+                      <p className="text-[10px] text-slate-500 mt-1">0 = no filter. 7 = only markets resolving within 1 week.</p>
                     </label>
                   </div>
 
