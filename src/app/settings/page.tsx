@@ -3,6 +3,9 @@ import { revalidatePath } from 'next/cache'
 
 import { supabaseAdmin } from '../../lib/supabaseAdmin'
 import type { Strategy, StrategySettings } from '@/types/dashboard'
+import KillSwitch from '@/app/components/KillSwitch'
+import TradingModeToggle from '@/app/components/TradingModeToggle'
+import TradeLogPanel from '@/app/components/TradeLogPanel'
 
 const defaults = {
   max_trade_notional: 200,
@@ -27,6 +30,12 @@ async function updateSettings(formData: FormData) {
   const liquidity_floor = Number(formData.get('liquidity_floor') || 0.5)
   const order_size_multiplier = Number(formData.get('order_size_multiplier') || 1.0)
 
+  // Live trading safeguard fields
+  const max_position_size = Number(formData.get('max_position_size') || 500)
+  const max_orders_per_minute = Number(formData.get('max_orders_per_minute') || 5)
+  const daily_loss_limit = Number(formData.get('daily_loss_limit') || -200)
+  const capital_allocation = Number(formData.get('capital_allocation') || 1000)
+
   if (!strategy_id) return
 
   await supabaseAdmin.from('strategy_settings').upsert({
@@ -41,7 +50,13 @@ async function updateSettings(formData: FormData) {
     order_size_multiplier,
   })
 
-  await supabaseAdmin.from('strategies').update({ paper_capital }).eq('id', strategy_id)
+  await supabaseAdmin.from('strategies').update({
+    paper_capital,
+    max_position_size,
+    max_orders_per_minute,
+    daily_loss_limit,
+    capital_allocation,
+  }).eq('id', strategy_id)
 
   revalidatePath('/settings')
   revalidatePath('/')
@@ -79,9 +94,12 @@ export default async function SettingsPage() {
     <main className="min-h-screen bg-slate-950 text-white p-8 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-semibold">Strategy Settings</h1>
-        <Link href="/" className="text-slate-400 hover:text-white">
-          ← Back
-        </Link>
+        <div className="flex items-center gap-4">
+          <KillSwitch hasLiveStrategies={strategies.some(s => s.trading_mode === 'live')} />
+          <Link href="/" className="text-slate-400 hover:text-white">
+            ← Back
+          </Link>
+        </div>
       </div>
 
       <div className="grid gap-6">
@@ -93,9 +111,16 @@ export default async function SettingsPage() {
               return (
                 <form key={strategy.id} action={updateSettings} className="rounded-lg border border-slate-800 bg-slate-900 p-5 space-y-4">
                   <input type="hidden" name="strategy_id" value={strategy.id} />
-                  <div>
-                    <h2 className="text-xl font-medium">{strategy.name}</h2>
-                    <p className="text-sm text-slate-400">Owner: {strategy.owner}</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-xl font-medium">{strategy.name}</h2>
+                      <p className="text-sm text-slate-400">Owner: {strategy.owner}</p>
+                    </div>
+                    <TradingModeToggle
+                      strategyId={strategy.id}
+                      strategyName={strategy.name}
+                      initialMode={(strategy.trading_mode as 'paper' | 'live') ?? 'paper'}
+                    />
                   </div>
 
                   <div className="text-sm text-slate-300 font-medium">Risk Settings</div>
@@ -119,6 +144,26 @@ export default async function SettingsPage() {
                     <label className="text-sm">
                       <div className="text-slate-400">Max Daily Loss</div>
                       <input name="max_daily_loss" defaultValue={strategySettings.max_daily_loss ?? defaults.max_daily_loss} className="mt-1 w-full rounded bg-slate-800 px-3 py-2" type="number" step="0.01" />
+                    </label>
+                  </div>
+
+                  <div className="text-sm text-slate-300 font-medium">Live Trading Safeguards</div>
+                  <div className="grid md:grid-cols-4 gap-4">
+                    <label className="text-sm">
+                      <div className="text-slate-400">Max Position Size ($)</div>
+                      <input name="max_position_size" defaultValue={strategy.max_position_size ?? 500} className="mt-1 w-full rounded bg-slate-800 px-3 py-2" type="number" step="1" />
+                    </label>
+                    <label className="text-sm">
+                      <div className="text-slate-400">Max Orders / Min</div>
+                      <input name="max_orders_per_minute" defaultValue={strategy.max_orders_per_minute ?? 5} className="mt-1 w-full rounded bg-slate-800 px-3 py-2" type="number" step="1" />
+                    </label>
+                    <label className="text-sm">
+                      <div className="text-slate-400">Daily Loss Limit ($)</div>
+                      <input name="daily_loss_limit" defaultValue={strategy.daily_loss_limit ?? -200} className="mt-1 w-full rounded bg-slate-800 px-3 py-2" type="number" step="1" />
+                    </label>
+                    <label className="text-sm">
+                      <div className="text-slate-400">Capital Allocation ($)</div>
+                      <input name="capital_allocation" defaultValue={strategy.capital_allocation ?? 1000} className="mt-1 w-full rounded bg-slate-800 px-3 py-2" type="number" step="1" />
                     </label>
                   </div>
 
@@ -151,6 +196,8 @@ export default async function SettingsPage() {
           </div>
         ))}
       </div>
+
+      <TradeLogPanel limit={100} />
     </main>
   )
 }

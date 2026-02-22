@@ -447,16 +447,30 @@ export default async function Home() {
                 <p className="text-sm text-slate-300 mt-3">{descriptionMap[agent.name] || 'Agent running.'}</p>
                 <div className="mt-4 w-full space-y-2">
                   {assignedStrategies.length > 0 ? (
-                    assignedStrategies.map((strategy) => (
+                    assignedStrategies.map((strategy) => {
+                      const sMode = strategy.trading_mode ?? 'paper'
+                      const isLive = sMode === 'live'
+                      return (
                       <Link
                         key={strategy.id}
                         href={`/strategy/${strategy.id}`}
                         prefetch={false}
-                        className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-xs transition hover:border-slate-700 hover:bg-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500"
+                        className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs transition hover:bg-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 ${
+                          isLive
+                            ? 'border-emerald-700/50 bg-slate-950 shadow-[0_0_12px_rgba(16,185,129,0.15)] hover:border-emerald-600/60'
+                            : 'border-slate-800 bg-slate-950 hover:border-slate-700'
+                        }`}
                         aria-label={`Open strategy ${strategy.name}`}
                       >
                         <div className="text-left">
-                          <div className="font-medium text-white/90">{strategy.name}</div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-white/90">{strategy.name}</span>
+                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase ${
+                              isLive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+                            }`}>
+                              {sMode}
+                            </span>
+                          </div>
                           <div className="text-[10px] uppercase tracking-wide text-slate-500">Tap to open details</div>
                         </div>
                         <div className="text-slate-400 text-right leading-tight">
@@ -465,7 +479,8 @@ export default async function Home() {
                           Eq {strategy.equity.toFixed(2)}
                         </div>
                       </Link>
-                    ))
+                      )
+                    })
                   ) : (
                     <div className="text-xs text-slate-500">No strategies assigned</div>
                   )}

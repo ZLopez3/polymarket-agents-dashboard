@@ -121,7 +121,7 @@ export async function testConnection() {
 export async function testAuth() {
   const client = await createPolyClient();
   const keys = await client.getApiKeys();
-  return { authenticated: true, keyCount: keys?.length ?? 0 };
+  return { authenticated: true, keyCount: keys?.apiKeys?.length ?? 0 };
 }
 
 export { Side, OrderType };

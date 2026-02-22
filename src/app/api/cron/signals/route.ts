@@ -1,21 +1,20 @@
 import { NextResponse } from 'next/server'
 import { supabase, verifyCronSecret, unauthorizedResponse, fetchJson } from '../_lib/supabase'
+import { checkSafeguards, logTradeEvent } from '../_lib/safeguards'
+import { placeOrder } from '@/lib/polymarket'
 
 const POLY_AGENT_API_BASE = 'https://gzydspfquuaudqeztorw.supabase.co/functions/v1/agent-api'
 const ORDER_AMOUNT_USD = Number(process.env.ORDER_AMOUNT_USD || 20)
 
-// Core signal logic for BondLadder + AI Contrarian (from live_signals.js)
-// Schedule: every 15 minutes
-
 export async function GET(request: Request) {
   if (!verifyCronSecret(request)) return unauthorizedResponse()
 
-  const { data: strategies } = await supabase.from('strategies').select('id,name')
+  const { data: strategies } = await supabase.from('strategies').select('id,name,trading_mode,max_position_size,max_orders_per_minute,daily_loss_limit')
   const { data: agents } = await supabase.from('agents').select('id,name,strategy_id')
   const { data: settings } = await supabase.from('strategy_settings').select('*')
 
-  const strategyMap: Record<string, string> = {}
-  ;(strategies || []).forEach((s) => (strategyMap[s.name] = s.id))
+  const strategyMap: Record<string, typeof strategies extends (infer T)[] | null ? T : never> = {}
+  ;(strategies || []).forEach((s) => (strategyMap[s.name] = s))
 
   const agentMap: Record<string, string> = {}
   ;(agents || []).forEach((a) => { if (a.strategy_id) agentMap[a.strategy_id] = a.id })
@@ -25,12 +24,126 @@ export async function GET(request: Request) {
 
   const results: string[] = []
 
+  // Helper: execute a trade (paper or live)
+  async function executeTrade(
+    strategyRow: { id: string; name: string; trading_mode: string | null; max_position_size: number | null; max_orders_per_minute: number | null; daily_loss_limit: number | null },
+    trade: { market: string; side: string; notional: number; pnl: number; market_id?: string | null; market_slug?: string | null; closes_at?: string | null; is_resolved?: boolean },
+    agentId: string | null,
+    tokenId?: string | null,
+  ) {
+    const mode = strategyRow.trading_mode ?? 'paper'
+    const strategyId = strategyRow.id
+
+    if (mode === 'live') {
+      // Run safeguard checks
+      const safeguard = await checkSafeguards({
+        supabase,
+        strategyId,
+        notional: trade.notional,
+        maxPositionSize: strategyRow.max_position_size ?? 500,
+        maxOrdersPerMinute: strategyRow.max_orders_per_minute ?? 5,
+        dailyLossLimit: strategyRow.daily_loss_limit ?? -200,
+      })
+
+      if (!safeguard.passed) {
+        await logTradeEvent(supabase, {
+          strategyId,
+          event: 'safety_block',
+          mode: 'live',
+          marketId: trade.market_id,
+          orderDetails: { market: trade.market, side: trade.side, notional: trade.notional },
+          result: safeguard.reason,
+        })
+        results.push(`${strategyRow.name}: BLOCKED - ${safeguard.reason}`)
+        return
+      }
+
+      // Attempt live execution
+      if (tokenId) {
+        try {
+          await logTradeEvent(supabase, {
+            strategyId,
+            event: 'live_request',
+            mode: 'live',
+            marketId: trade.market_id,
+            orderDetails: { tokenId, side: trade.side, size: trade.notional, price: trade.side === 'YES' ? 0.5 : 0.5 },
+          })
+
+          const orderResult = await placeOrder({
+            tokenId,
+            price: trade.side === 'YES' ? 0.5 : 0.5,
+            size: trade.notional,
+            side: trade.side as 'BUY' | 'SELL',
+          })
+
+          await logTradeEvent(supabase, {
+            strategyId,
+            event: 'live_response',
+            mode: 'live',
+            marketId: trade.market_id,
+            orderDetails: orderResult as unknown as Record<string, unknown>,
+            result: 'success',
+          })
+
+          results.push(`${strategyRow.name}: LIVE ${trade.market} ${trade.side}`)
+        } catch (err) {
+          await logTradeEvent(supabase, {
+            strategyId,
+            event: 'live_response',
+            mode: 'live',
+            marketId: trade.market_id,
+            error: (err as Error).message,
+            result: 'failed',
+          })
+          results.push(`${strategyRow.name}: LIVE FAILED - ${(err as Error).message}`)
+          return
+        }
+      } else {
+        // No tokenId available for live execution, fall back to paper
+        await logTradeEvent(supabase, {
+          strategyId,
+          event: 'safety_block',
+          mode: 'live',
+          marketId: trade.market_id,
+          result: 'No tokenId available for live execution, falling back to paper',
+        })
+      }
+    }
+
+    // Insert trade record (both paper and live post-success)
+    await supabase.from('trades').insert({
+      strategy_id: strategyId,
+      agent_id: agentId,
+      market: trade.market,
+      side: trade.side,
+      notional: trade.notional,
+      pnl: trade.pnl,
+      market_id: trade.market_id || null,
+      market_slug: trade.market_slug || null,
+      closes_at: trade.closes_at || null,
+      is_resolved: trade.is_resolved ?? false,
+    })
+
+    await logTradeEvent(supabase, {
+      strategyId,
+      event: mode === 'live' ? 'live_exec' : 'paper_exec',
+      mode,
+      marketId: trade.market_id,
+      orderDetails: { market: trade.market, side: trade.side, notional: trade.notional, pnl: trade.pnl },
+      result: 'recorded',
+    })
+
+    if (mode === 'paper') {
+      results.push(`${strategyRow.name}: PAPER ${trade.market} ${trade.side}`)
+    }
+  }
+
   // --- Bond Ladder Signal ---
-  const bondId = strategyMap['Polymarket Bond Ladder']
-  if (bondId) {
+  const bondRow = strategyMap['Polymarket Bond Ladder']
+  if (bondRow) {
     try {
       const markets = await fetchJson(`${POLY_AGENT_API_BASE}?action=markets&limit=25&sort=volume_usd&agent_id=BondLadder-Agent`)
-      const s = settingsMap[bondId] || {}
+      const s = settingsMap[bondRow.id] || {}
       const certainty = s.certainty_threshold ?? 0.95
       const liquidityFloor = (s.liquidity_floor ?? 0.5) * 1_000_000
       const candidates = (markets.data || []).filter(
@@ -48,26 +161,19 @@ export async function GET(request: Request) {
         const size = Number((baseSize * jitter).toFixed(2))
         const pnl = Number((size * (1.0 - price)).toFixed(2))
 
-        await supabase.from('trades').insert({
-          strategy_id: bondId,
-          agent_id: agentMap[bondId] || null,
-          market: pick.title,
-          side,
-          notional: size,
-          pnl,
-          market_id: pick.market_id || null,
-          market_slug: pick.slug || null,
-          closes_at: pick.closes_at || null,
-          is_resolved: pick.is_resolved ?? false,
-        })
+        await executeTrade(
+          bondRow,
+          { market: pick.title, side, notional: size, pnl, market_id: pick.market_id, market_slug: pick.slug, closes_at: pick.closes_at, is_resolved: pick.is_resolved ?? false },
+          agentMap[bondRow.id] || null,
+          pick.token_id || null,
+        )
 
         await supabase.from('events').insert({
-          agent_id: agentMap[bondId] || null,
+          agent_id: agentMap[bondRow.id] || null,
           event_type: 'bond_ladder_signal',
           severity: 'info',
-          message: `Signal: ${pick.title} @ ${price} (${side})`,
+          message: `Signal: ${pick.title} @ ${price} (${side}) [${bondRow.trading_mode ?? 'paper'}]`,
         })
-        results.push(`BondLadder: ${pick.title} ${side}`)
       } else {
         results.push('BondLadder: no candidates')
       }
@@ -77,11 +183,11 @@ export async function GET(request: Request) {
   }
 
   // --- AI Contrarian Signal ---
-  const aiId = strategyMap['AI Contrarian']
-  if (aiId) {
+  const aiRow = strategyMap['AI Contrarian']
+  if (aiRow) {
     try {
       const res = await fetchJson(`${POLY_AGENT_API_BASE}?action=ai-vs-humans&limit=25&agent_id=AIContrarian-Agent`)
-      const s = settingsMap[aiId] || {}
+      const s = settingsMap[aiRow.id] || {}
       const threshold = s.divergence_threshold ?? 20
       const candidates = (res.data || []).filter(
         (m: Record<string, unknown>) => Math.abs((m.divergence as number) || 0) >= threshold
@@ -108,26 +214,19 @@ export async function GET(request: Request) {
           } catch { /* ignore */ }
         }
 
-        await supabase.from('trades').insert({
-          strategy_id: aiId,
-          agent_id: agentMap[aiId] || null,
-          market: pick.title,
-          side,
-          notional: size,
-          pnl,
-          market_id: details?.market_id || null,
-          market_slug: slug || null,
-          closes_at: details?.closes_at || null,
-          is_resolved: details?.is_resolved ?? false,
-        })
+        await executeTrade(
+          aiRow,
+          { market: pick.title, side, notional: size, pnl, market_id: (details?.market_id as string) || null, market_slug: slug || null, closes_at: (details?.closes_at as string) || null, is_resolved: (details?.is_resolved as boolean) ?? false },
+          agentMap[aiRow.id] || null,
+          (details?.token_id as string) || null,
+        )
 
         await supabase.from('events').insert({
-          agent_id: agentMap[aiId] || null,
+          agent_id: agentMap[aiRow.id] || null,
           event_type: 'ai_contrarian_signal',
           severity: 'info',
-          message: `Signal: ${pick.title} (AI ${pick.aiConsensus?.toFixed?.(2) ?? pick.aiConsensus} vs market ${pick.polymarketPrice})`,
+          message: `Signal: ${pick.title} (AI ${pick.aiConsensus?.toFixed?.(2) ?? pick.aiConsensus} vs market ${pick.polymarketPrice}) [${aiRow.trading_mode ?? 'paper'}]`,
         })
-        results.push(`Contrarian: ${pick.title} ${side}`)
       } else {
         results.push('Contrarian: no candidates')
       }

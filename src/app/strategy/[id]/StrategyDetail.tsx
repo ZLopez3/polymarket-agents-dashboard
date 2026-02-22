@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 
 import type { Strategy, Trade } from '@/types/dashboard'
+import TradingModeToggle from '@/app/components/TradingModeToggle'
+import TradeLogPanel from '@/app/components/TradeLogPanel'
 
 type RangeOption = {
   label: string
@@ -131,9 +133,23 @@ export default function StrategyDetail({ strategy, trades }: Props) {
       </div>
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-semibold">{strategy.name}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-semibold">{strategy.name}</h1>
+            <span className={`rounded px-2 py-0.5 text-xs font-mono font-semibold uppercase ${
+              strategy.trading_mode === 'live'
+                ? 'bg-emerald-500/20 text-emerald-400'
+                : 'bg-amber-500/20 text-amber-400'
+            }`}>
+              {strategy.trading_mode ?? 'paper'}
+            </span>
+          </div>
           <p className="text-slate-400">Owner: {strategy.owner}</p>
         </div>
+        <TradingModeToggle
+          strategyId={strategy.id}
+          strategyName={strategy.name}
+          initialMode={(strategy.trading_mode as 'paper' | 'live') ?? 'paper'}
+        />
       </header>
 
       <section className="flex gap-3 flex-wrap">
@@ -227,6 +243,8 @@ export default function StrategyDetail({ strategy, trades }: Props) {
           </table>
         </div>
       </section>
+
+      <TradeLogPanel strategyId={strategy.id} />
     </main>
   )
 }
