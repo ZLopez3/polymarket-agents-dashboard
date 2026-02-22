@@ -123,7 +123,7 @@ export default async function Home() {
 
     const pnl = isLive ? Number(strategy.paper_pnl ?? 0) : paperPnl
     const equity = isLive
-      ? Number(strategy.paper_cash ?? base) + Number(strategy.paper_pnl ?? 0)
+      ? base + Number(strategy.paper_pnl ?? 0)
       : base + paperPnl
 
     return { ...strategy, pnl, notional, tradeCount, equity, base }

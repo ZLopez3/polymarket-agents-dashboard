@@ -55,6 +55,7 @@ async function updateSettings(formData: FormData) {
 
   await supabaseAdmin.from('strategies').update({
     paper_capital,
+    paper_cash: paper_capital,
     max_position_size,
     max_orders_per_minute,
     daily_loss_limit,
