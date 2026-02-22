@@ -1,0 +1,28 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/heartbeat",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/signals",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/copy-trader",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/fin-insights",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/resolve-refresh",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/auditor",
+      "schedule": "0 */4 * * *"
+    }
+  ]
+}
