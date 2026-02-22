@@ -334,7 +334,7 @@ export default async function Home() {
       copyScore,
       tier,
       lastTrade: fin?.last_trade_date ?? null,
-      sourceUrl: `https://polyvisionx.com/wallet/${addr}`,
+      sourceUrl: `https://polymarket.com/profile/${addr}`,
       notes: fin ? `Fin-verified | ${pw.notes}` : pw.notes,
     }
   })
@@ -358,7 +358,7 @@ export default async function Home() {
         copyScore,
         tier,
         lastTrade: p.last_trade_date ?? null,
-        sourceUrl: `https://polyvisionx.com/wallet/${addr}`,
+        sourceUrl: `https://polymarket.com/profile/${addr}`,
         notes: `Fin-discovered${topCat ? ` (${topCat} focus)` : ''}`,
       }
     })
