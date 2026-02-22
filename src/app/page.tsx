@@ -192,6 +192,35 @@ export default async function Home() {
   }, {})
 
   const leaderboardRows = agentRows.filter((agent) => (agent.agent_type ?? '').toLowerCase() !== 'utility')
+
+  // Build strategy-level leaderboard rows (execution agents only, exclude utility/research)
+  const utilityAgentIds = new Set(
+    agents.filter((a) => ['utility', 'research'].includes((a.agent_type ?? '').toLowerCase())).map((a) => a.id)
+  )
+  const leaderboardStrategies = strategyStats.filter((s) => {
+    if (!s.agent_id) return false
+    return !utilityAgentIds.has(s.agent_id)
+  })
+  const liveLeaderboard = leaderboardStrategies
+    .filter((s) => s.trading_mode === 'live')
+    .sort((a, b) => b.pnl - a.pnl)
+  const paperLeaderboard = leaderboardStrategies
+    .filter((s) => s.trading_mode !== 'live')
+    .sort((a, b) => b.pnl - a.pnl)
+
+  const leaderboardMeta = (s: StrategyStats) => {
+    const agentName = s.agent_id ? agentNameMap[s.agent_id] ?? 'Unknown' : 'Unassigned'
+    const sTrades = trades.filter((t) => t.strategy_id === s.id)
+    const notional = sTrades.reduce((acc, t) => acc + (Number(t.notional) || 0), 0)
+    const isLive = s.trading_mode === 'live'
+    const cash = isLive
+      ? Number(s.paper_cash ?? s.base ?? 1000)
+      : Math.max((s.base ?? 1000) - notional + (s.pnl ?? 0), 0)
+    const positions = new Set(sTrades.map((t) => t.market)).size
+    const tradeCount = isLive ? sTrades.filter((t) => t.trading_mode === 'live').length : sTrades.length
+    return { agentName, cash, positions, tradeCount }
+  }
+
   const totalPositions = new Set(trades.map((trade) => trade.market)).size
   const recentTrades = trades.slice(0, 25)
   const recentEvents = events.slice(0, 25)
@@ -395,43 +424,90 @@ export default async function Home() {
         </div>
       </section>
 
+      {/* Live Trading Leaderboard */}
       <section>
-        <h1 className="text-2xl font-semibold">Agent Leaderboard</h1>
-        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-800">
+        <div className="flex items-center gap-3">
+          <h2 className="text-2xl font-semibold">Live Trading Leaderboard</h2>
+          <span className="rounded px-2 py-0.5 text-[10px] font-mono font-semibold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Live</span>
+        </div>
+        <div className="mt-4 overflow-x-auto rounded-lg border border-emerald-800/40">
           <table className="w-full text-sm">
-            <thead className="bg-slate-900">
+            <thead className="bg-emerald-950/30">
               <tr>
-                <th className="px-4 py-2 text-left">Agent</th>
-                <th className="px-4 py-2 text-left">Mode</th>
-                <th className="px-4 py-2 text-left">Portfolio</th>
-                <th className="px-4 py-2 text-left">PnL</th>
-                <th className="px-4 py-2 text-left">Cash</th>
-                <th className="px-4 py-2 text-left">Positions</th>
-                <th className="px-4 py-2 text-left">Trades</th>
+                <th className="px-4 py-2 text-left text-slate-300">Agent</th>
+                <th className="px-4 py-2 text-left text-slate-300">Strategy</th>
+                <th className="px-4 py-2 text-right text-slate-300">Portfolio</th>
+                <th className="px-4 py-2 text-right text-slate-300">PnL</th>
+                <th className="px-4 py-2 text-right text-slate-300">Cash</th>
+                <th className="px-4 py-2 text-right text-slate-300">Positions</th>
+                <th className="px-4 py-2 text-right text-slate-300">Trades</th>
               </tr>
             </thead>
             <tbody>
-              {leaderboardRows.map((agent) => (
-                <tr key={agent.id} className="border-t border-slate-800">
-                  <td className="px-4 py-2">{agent.name}</td>
-                  <td className="px-4 py-2">
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase ${
-                      agent.mode === 'live' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
-                    }`}>
-                      {agent.mode}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2">${agent.portfolio.toFixed(2)}</td>
-                  <td className={`px-4 py-2 ${agent.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>${agent.pnl.toFixed(2)}</td>
-                  <td className="px-4 py-2">${agent.cash.toFixed(2)}</td>
-                  <td className="px-4 py-2">{agent.positions}</td>
-                  <td className="px-4 py-2">{agent.trades}</td>
-                </tr>
-              ))}
-              {leaderboardRows.length === 0 && (
+              {liveLeaderboard.map((s) => {
+                const m = leaderboardMeta(s)
+                return (
+                  <tr key={s.id} className="border-t border-emerald-900/30 hover:bg-emerald-950/20 transition-colors">
+                    <td className="px-4 py-2 font-medium">{m.agentName}</td>
+                    <td className="px-4 py-2 text-slate-300">{s.name}</td>
+                    <td className="px-4 py-2 text-right font-mono">${s.equity.toFixed(2)}</td>
+                    <td className={`px-4 py-2 text-right font-mono ${s.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-right font-mono">${m.cash.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-right">{m.positions}</td>
+                    <td className="px-4 py-2 text-right">{m.tradeCount}</td>
+                  </tr>
+                )
+              })}
+              {liveLeaderboard.length === 0 && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={7}>
-                    No agents found.
+                  <td className="px-4 py-4 text-slate-500" colSpan={7}>
+                    No live strategies yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Paper Trading Leaderboard */}
+      <section>
+        <div className="flex items-center gap-3">
+          <h2 className="text-2xl font-semibold">Paper Trading Leaderboard</h2>
+          <span className="rounded px-2 py-0.5 text-[10px] font-mono font-semibold uppercase bg-amber-500/20 text-amber-400 border border-amber-500/30">Paper</span>
+        </div>
+        <div className="mt-4 overflow-x-auto rounded-lg border border-amber-800/40">
+          <table className="w-full text-sm">
+            <thead className="bg-amber-950/30">
+              <tr>
+                <th className="px-4 py-2 text-left text-slate-300">Agent</th>
+                <th className="px-4 py-2 text-left text-slate-300">Strategy</th>
+                <th className="px-4 py-2 text-right text-slate-300">Portfolio</th>
+                <th className="px-4 py-2 text-right text-slate-300">PnL</th>
+                <th className="px-4 py-2 text-right text-slate-300">Cash</th>
+                <th className="px-4 py-2 text-right text-slate-300">Positions</th>
+                <th className="px-4 py-2 text-right text-slate-300">Trades</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paperLeaderboard.map((s) => {
+                const m = leaderboardMeta(s)
+                return (
+                  <tr key={s.id} className="border-t border-amber-900/30 hover:bg-amber-950/20 transition-colors">
+                    <td className="px-4 py-2 font-medium">{m.agentName}</td>
+                    <td className="px-4 py-2 text-slate-300">{s.name}</td>
+                    <td className="px-4 py-2 text-right font-mono">${s.equity.toFixed(2)}</td>
+                    <td className={`px-4 py-2 text-right font-mono ${s.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-right font-mono">${m.cash.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-right">{m.positions}</td>
+                    <td className="px-4 py-2 text-right">{m.tradeCount}</td>
+                  </tr>
+                )
+              })}
+              {paperLeaderboard.length === 0 && (
+                <tr>
+                  <td className="px-4 py-4 text-slate-500" colSpan={7}>
+                    No paper strategies yet.
                   </td>
                 </tr>
               )}

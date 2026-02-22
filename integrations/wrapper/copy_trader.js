@@ -39,7 +39,7 @@ const WATCH_WALLETS = new Set([
   '0x9c667a1d1c1337c6dca9d93241d386e4ed346b66', // InfiniteCrypt0 – 71.1%
 ].map((w) => w.toLowerCase()));
 
-const MAX_RESOLUTION_WINDOW_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+const MAX_RESOLUTION_WINDOW_MS = 21 * 24 * 60 * 60 * 1000; // 21 days
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
@@ -80,7 +80,7 @@ async function postTrade(payload) {
 }
 
 async function getStrategyId() {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/strategies?select=id,name&name=eq.${encodeURIComponent('Copy Trader - Whale Mirror (Crypto)')}`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/strategies?select=id,name&name=eq.${encodeURIComponent('Copy Trader - Whale Mirror')}`, {
     headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
   });
   const data = await res.json();
@@ -98,13 +98,17 @@ async function runOnce() {
   const strategyId = await getStrategyId();
   if (!strategyId) return;
 
-  const feed = await fetchJson(`${BASE}?action=whales&limit=50`);
+  const feed = await fetchJson(`${BASE}?action=whales&limit=200`);
   const rows = feed.data || [];
+
+  console.log(`[copy-trader] Fetched ${rows.length} whale rows, watching ${WATCH_WALLETS.size} wallets`);
+
+  let matchedWallet = 0;
 
   for (const w of rows) {
     const wallet = (w.wallet || '').toLowerCase();
     if (!WATCH_WALLETS.has(wallet)) continue;
-    if (w.market_category && w.market_category.toLowerCase() !== 'crypto') continue;
+    matchedWallet++;
 
     if (!w.closes_at) continue;
     const closesAt = new Date(w.closes_at);
@@ -140,7 +144,7 @@ async function runOnce() {
 }
 
 async function main() {
-  await postEvent({ event_type: 'copy_trader_online', severity: 'info', message: 'Copy trader watcher online (crypto-only)' });
+  await postEvent({ event_type: 'copy_trader_online', severity: 'info', message: 'Copy trader watcher online (all categories)' });
   await runOnce();
   setInterval(async () => {
     try {

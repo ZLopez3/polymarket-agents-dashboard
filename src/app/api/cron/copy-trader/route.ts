@@ -69,13 +69,18 @@ export async function GET(request: Request) {
   const results: string[] = []
 
   try {
-    const feed = await fetchJson(`${BASE}?action=whales&limit=50`)
+    const feed = await fetchJson(`${BASE}?action=whales&limit=200`)
     const rows = feed.data || []
+
+    console.log(`[copy-trader] Fetched ${rows.length} whale rows, watching ${WATCH_WALLETS.size} wallets`)
+
+    let matchedWallet = 0
+    let passedResolution = 0
 
     for (const w of rows) {
       const wallet = (w.wallet || '').toLowerCase()
       if (!WATCH_WALLETS.has(wallet)) continue
-      if (w.market_category && w.market_category.toLowerCase() !== 'crypto') continue
+      matchedWallet++
 
       if (maxResolutionMs > 0) {
         if (!w.closes_at) continue
@@ -83,6 +88,7 @@ export async function GET(request: Request) {
         if (Number.isNaN(closesAt.getTime())) continue
         if (closesAt.getTime() - Date.now() > maxResolutionMs) continue
       }
+      passedResolution++
 
       const side = (w.outcome || '').toLowerCase().includes('no') ? 'NO' : 'YES'
       const dedupeKey = `${w.market_title}-${side}`
@@ -218,5 +224,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 })
   }
 
-  return NextResponse.json({ ok: true, mode, trades: results.length, results })
+  console.log(`[copy-trader] Summary: ${rows.length} fetched, ${matchedWallet} wallet-matched, ${passedResolution} passed-resolution, ${results.length} traded`)
+
+  return NextResponse.json({ ok: true, mode, trades: results.length, results, diagnostics: { fetched: rows.length, matchedWallet, passedResolution } })
 }
