@@ -17,6 +17,7 @@ export interface Strategy {
   paper_cash?: number | null
   paper_pnl?: number | null
   paper_positions?: number | null
+  mode_switched_at?: string | null
 }
 
 export interface StrategySettings {

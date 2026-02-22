@@ -120,7 +120,14 @@ export default async function Home() {
 
   const strategyStats: StrategyStats[] = strategies.map((strategy) => {
     const isLive = strategy.trading_mode === 'live'
-    const strategyTrades = trades.filter((trade) => trade.strategy_id === strategy.id)
+    const modeSwitchedAt = strategy.mode_switched_at ? new Date(strategy.mode_switched_at).getTime() : 0
+    const strategyTrades = trades.filter((trade) => {
+      if (trade.strategy_id !== strategy.id) return false
+      if (modeSwitchedAt && trade.executed_at) {
+        return new Date(trade.executed_at).getTime() >= modeSwitchedAt
+      }
+      return true
+    })
     const notional = strategyTrades.reduce((acc, trade) => acc + (Number(trade.notional) || 0), 0)
     const tradeCount = strategyTrades.length
 
@@ -208,15 +215,23 @@ export default async function Home() {
 
   const leaderboardMeta = (s: StrategyStats) => {
     const agentName = s.agent_id ? agentNameMap[s.agent_id] ?? 'Unknown' : 'Unassigned'
-    const sTrades = trades.filter((t) => t.strategy_id === s.id)
-    const notional = sTrades.reduce((acc, t) => acc + (Number(t.notional) || 0), 0)
     const isLive = s.trading_mode === 'live'
+    const modeSwitchedAt = s.mode_switched_at ? new Date(s.mode_switched_at).getTime() : 0
+    // Only count trades that belong to the current mode epoch
+    const sTrades = trades.filter((t) => {
+      if (t.strategy_id !== s.id) return false
+      if (modeSwitchedAt && t.executed_at) {
+        return new Date(t.executed_at).getTime() >= modeSwitchedAt
+      }
+      return true
+    })
+    const notional = sTrades.reduce((acc, t) => acc + (Number(t.notional) || 0), 0)
     const base = s.base ?? Number(s.paper_capital ?? 1000)
     const cash = Math.max(0, isLive
       ? base + (s.pnl ?? 0) - notional
       : base - notional + (s.pnl ?? 0))
     const positions = new Set(sTrades.map((t) => t.market)).size
-    const tradeCount = isLive ? sTrades.filter((t) => t.trading_mode === 'live').length : sTrades.length
+    const tradeCount = sTrades.length
     return { agentName, cash, positions, tradeCount }
   }
 
