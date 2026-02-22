@@ -46,9 +46,10 @@ function randPnl() {
 }
 
 async function getStrategies() {
-  const { data, error } = await supabase.from('strategies').select('id,name');
+  const { data, error } = await supabase.from('strategies').select('id,name,trading_mode');
   if (error) throw error;
-  return data || [];
+  // Only return strategies in paper mode -- live strategies are handled by live_signals.js / cron
+  return (data || []).filter((s) => (s.trading_mode || 'paper') === 'paper');
 }
 
 async function postTrade(payload) {

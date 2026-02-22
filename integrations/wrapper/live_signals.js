@@ -73,7 +73,7 @@ async function postTrade(payload) {
 }
 
 async function getStrategyIds() {
-  const { data: strategies, error } = await supabase.from('strategies').select('id,name');
+  const { data: strategies, error } = await supabase.from('strategies').select('id,name,trading_mode');
   const { data: agents } = await supabase.from('agents').select('id,name,strategy_id');
   if (error) throw error;
   const { data: settings } = await supabase.from('strategy_settings').select('*');
@@ -82,11 +82,12 @@ async function getStrategyIds() {
   const settingsMap = {};
   (settings || []).forEach((s) => (settingsMap[s.strategy_id] = s));
   const map = {};
-  (strategies || []).forEach((s) => (map[s.name] = s.id));
-  return { map, settingsMap, agentMap };
+  const modeMap = {};
+  (strategies || []).forEach((s) => { map[s.name] = s.id; modeMap[s.id] = s.trading_mode || 'paper'; });
+  return { map, modeMap, settingsMap, agentMap };
 }
 
-async function bondLadderSignal(strategyId, settings, agentId) {
+async function bondLadderSignal(strategyId, settings, agentId, tradingMode) {
   const markets = await fetchJson(`${POLY_AGENT_API_BASE}?action=markets&limit=25&sort=volume_usd&agent_id=BondLadder-Agent`);
   const certainty = settings.certainty_threshold ?? 0.95;
   const liquidityFloor = (settings.liquidity_floor ?? 0.5) * 1_000_000;
@@ -112,17 +113,18 @@ async function bondLadderSignal(strategyId, settings, agentId) {
     market_slug: pick.slug || null,
     closes_at: pick.closes_at || null,
     is_resolved: pick.is_resolved ?? false,
+    trading_mode: tradingMode,
   });
 
   await postEvent({
     agent_id: agentId || null,
     event_type: 'bond_ladder_signal',
     severity: 'info',
-    message: `Signal: ${pick.title} @ ${price} (${side})`,
+    message: `Signal: ${pick.title} @ ${price} (${side}) [${tradingMode}]`,
   });
 }
 
-async function aiContrarianSignal(strategyId, settings, agentId) {
+async function aiContrarianSignal(strategyId, settings, agentId, tradingMode) {
   const res = await fetchJson(`${POLY_AGENT_API_BASE}?action=ai-vs-humans&limit=25&agent_id=AIContrarian-Agent`);
   const threshold = settings.divergence_threshold ?? 20;
   const candidates = res.data.filter((m) => Math.abs(m.divergence || 0) >= threshold);
@@ -153,18 +155,19 @@ async function aiContrarianSignal(strategyId, settings, agentId) {
     market_slug: slug || null,
     closes_at: details?.closes_at || null,
     is_resolved: details?.is_resolved ?? false,
+    trading_mode: tradingMode,
   });
 
   await postEvent({
     agent_id: agentId || null,
     event_type: 'ai_contrarian_signal',
     severity: 'info',
-    message: `Signal: ${pick.title} (AI ${pick.aiConsensus?.toFixed?.(2) ?? pick.aiConsensus} vs market ${pick.polymarketPrice})`,
+    message: `Signal: ${pick.title} (AI ${pick.aiConsensus?.toFixed?.(2) ?? pick.aiConsensus} vs market ${pick.polymarketPrice}) [${tradingMode}]`,
   });
 }
 
 async function run() {
-  const { map: ids, settingsMap, agentMap } = await getStrategyIds();
+  const { map: ids, modeMap, settingsMap, agentMap } = await getStrategyIds();
   const bondId = ids['Polymarket Bond Ladder'];
   const aiId = ids['AI Contrarian'];
   if (!bondId || !aiId) {
@@ -177,8 +180,11 @@ async function run() {
 
   setInterval(async () => {
     try {
-      await bondLadderSignal(bondId, settingsMap[bondId] || {}, agentMap[bondId]);
-      await aiContrarianSignal(aiId, settingsMap[aiId] || {}, agentMap[aiId]);
+      // Re-fetch modes each tick so mode changes take effect without restarting
+      const fresh = await getStrategyIds();
+      const freshMode = fresh.modeMap;
+      await bondLadderSignal(bondId, settingsMap[bondId] || {}, agentMap[bondId], freshMode[bondId] || 'paper');
+      await aiContrarianSignal(aiId, settingsMap[aiId] || {}, agentMap[aiId], freshMode[aiId] || 'paper');
     } catch (err) {
       console.error('Signal runner error', err?.message || err);
     }

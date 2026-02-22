@@ -164,10 +164,18 @@ app.post('/trade', async (req, res) => {
     market_slug = null,
     closes_at = null,
     is_resolved = false,
+    trading_mode = null,
   } = req.body || {};
 
   if (!strategy_id || !market || !side || typeof notional === 'undefined') {
     return res.status(400).json({ error: 'strategy_id, market, side, notional required' });
+  }
+
+  // Resolve trading_mode: use explicit value if provided, otherwise look up the strategy's current mode
+  let mode = trading_mode;
+  if (!mode) {
+    const { data: stratRow } = await supabase.from('strategies').select('trading_mode').eq('id', strategy_id).single();
+    mode = stratRow?.trading_mode || 'paper';
   }
 
   const risk = await checkRisk(strategy_id, agent_id, notional, pnl);
@@ -187,6 +195,7 @@ app.post('/trade', async (req, res) => {
     market_slug,
     closes_at,
     is_resolved,
+    trading_mode: mode,
   });
 
   if (error) return res.status(500).json({ error: error.message });
