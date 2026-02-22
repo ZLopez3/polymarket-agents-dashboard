@@ -9,6 +9,11 @@ export interface Strategy {
   agent_id?: string | null
   bankroll_pct?: number | null
   created_at?: string | null
+  trading_mode?: 'paper' | 'live' | null
+  max_position_size?: number | null
+  max_orders_per_minute?: number | null
+  daily_loss_limit?: number | null
+  capital_allocation?: number | null
 }
 
 export interface StrategySettings {
@@ -76,6 +81,18 @@ export interface AgentRow extends Agent {
   positions: number
   trades: number
 }
+export interface TradeLog {
+  id: string
+  strategy_id?: string | null
+  event: string
+  mode: string
+  market_id?: string | null
+  order_details?: Record<string, unknown> | null
+  result?: string | null
+  error?: string | null
+  created_at: string
+}
+
 export interface CopyTraderWallet {
   address: string
   label: string
