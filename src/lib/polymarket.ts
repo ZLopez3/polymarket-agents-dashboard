@@ -140,7 +140,15 @@ export async function resolveTokenIds(slug: string): Promise<{
     const data = await res.json();
 
     // Skip resolved, closed, or archived markets early
-    if (data.closed === true || data.active === false || data.archived === true || data.resolved === true) {
+    // Gamma uses: closed, active, archived, umaResolutionStatus, resolvedBy, endDate
+    const isClosed = data.closed === true;
+    const isInactive = data.active === false;
+    const isArchived = data.archived === true;
+    const isResolved = data.resolved === true
+      || data.umaResolutionStatus === "resolved"
+      || !!data.resolvedBy;
+    const isPastEnd = data.endDate && new Date(data.endDate).getTime() < Date.now();
+    if (isClosed || isInactive || isArchived || isResolved || isPastEnd) {
       return null;
     }
 

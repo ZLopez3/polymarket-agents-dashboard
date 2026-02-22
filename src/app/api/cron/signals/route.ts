@@ -168,12 +168,15 @@ export async function GET(request: Request) {
       const certainty = s.certainty_threshold ?? 0.95
       const liquidityFloor = (s.liquidity_floor ?? 0.5) * 1_000_000
       const maxResDays = s.max_resolution_days ?? 0
+      const now = Date.now()
       const candidates = (markets.data || []).filter(
         (m: Record<string, unknown>) =>
           ((m.yes_price as number) >= certainty || (m.no_price as number) >= certainty) &&
           !m.is_resolved &&
           ((m.liquidity_usd as number) ?? 0) >= liquidityFloor &&
-          withinResolutionWindow(m.closes_at as string | null, maxResDays)
+          withinResolutionWindow(m.closes_at as string | null, maxResDays) &&
+          // Skip markets whose close date has already passed (agent API may lag resolution)
+          (!m.closes_at || new Date(m.closes_at as string).getTime() > now)
       )
       if (candidates.length) {
         const pick = candidates[Math.floor(Math.random() * candidates.length)]
