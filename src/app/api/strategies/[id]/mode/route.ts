@@ -46,7 +46,10 @@ export async function POST(
   }
 
   // --- Build the update payload ---
-  const updatePayload: Record<string, unknown> = { trading_mode: mode };
+  const updatePayload: Record<string, unknown> = {
+    trading_mode: mode,
+    mode_switched_at: new Date().toISOString(),
+  };
 
   // When switching to live, reset the portfolio to start fresh with capital_allocation
   if (mode === "live") {

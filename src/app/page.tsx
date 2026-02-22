@@ -8,6 +8,11 @@ import type { Agent, AgentEvent, AgentHeartbeat, AgentRow, CopyTraderWallet, Str
 
 export const dynamic = 'force-dynamic'
 
+interface FinWalletRec {
+  payload: { address?: string; username?: string; win_rate?: number; copy_score?: number; categories?: Record<string, number> }
+  created_at: string
+}
+
 interface SummaryData {
   strategies: Strategy[]
   agents: Agent[]
@@ -15,20 +20,22 @@ interface SummaryData {
   events: AgentEvent[]
   heartbeats: AgentHeartbeat[]
   copySignals: AgentEvent[]
+  finWalletRecs: FinWalletRec[]
 }
 
 async function fetchSummary(): Promise<SummaryData> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-    return { strategies: [], agents: [], trades: [], events: [], heartbeats: [], copySignals: [] }
+    return { strategies: [], agents: [], trades: [], events: [], heartbeats: [], copySignals: [], finWalletRecs: [] }
   }
 
-  const [strategiesRes, agentsRes, tradesRes, eventsRes, heartbeatsRes, copySignalsRes] = await Promise.all([
+  const [strategiesRes, agentsRes, tradesRes, eventsRes, heartbeatsRes, copySignalsRes, finWalletRecsRes] = await Promise.all([
     supabase.from('strategies').select('*').limit(10),
     supabase.from('agents').select('*').limit(10),
     supabase.from('trades').select('*').order('executed_at', { ascending: false }).limit(500),
     supabase.from('events').select('*').order('created_at', { ascending: false }).limit(50),
     supabase.from('agent_heartbeats').select('*').order('created_at', { ascending: false }).limit(50),
     supabase.from('events').select('*').like('event_type', 'copy_trader%').order('created_at', { ascending: false }).limit(20),
+    supabase.from('fin_recommendations').select('payload,created_at').eq('recommendation_type', 'wallet').gte('expires_at', new Date().toISOString()).order('created_at', { ascending: false }).limit(20),
   ])
 
   return {
@@ -38,6 +45,7 @@ async function fetchSummary(): Promise<SummaryData> {
     events: (eventsRes.data ?? []) as AgentEvent[],
     heartbeats: (heartbeatsRes.data ?? []) as AgentHeartbeat[],
     copySignals: (copySignalsRes.data ?? []) as AgentEvent[],
+    finWalletRecs: (finWalletRecsRes.data ?? []) as FinWalletRec[],
   }
 }
 
@@ -92,7 +100,7 @@ const statusColor = (status: string) => {
 }
 
 export default async function Home() {
-  const { strategies, agents, trades, events, heartbeats, copySignals } = await fetchSummary()
+  const { strategies, agents, trades, events, heartbeats, copySignals, finWalletRecs } = await fetchSummary()
   const now = new Date().getTime()
 
   const executionAgents = agents.filter((agent) => (agent.agent_type ?? 'execution') === 'execution')
@@ -112,7 +120,14 @@ export default async function Home() {
 
   const strategyStats: StrategyStats[] = strategies.map((strategy) => {
     const isLive = strategy.trading_mode === 'live'
-    const strategyTrades = trades.filter((trade) => trade.strategy_id === strategy.id)
+    const modeSwitchedAt = strategy.mode_switched_at ? new Date(strategy.mode_switched_at).getTime() : 0
+    const strategyTrades = trades.filter((trade) => {
+      if (trade.strategy_id !== strategy.id) return false
+      if (modeSwitchedAt && trade.executed_at) {
+        return new Date(trade.executed_at).getTime() >= modeSwitchedAt
+      }
+      return true
+    })
     const notional = strategyTrades.reduce((acc, trade) => acc + (Number(trade.notional) || 0), 0)
     const tradeCount = strategyTrades.length
 
@@ -123,7 +138,7 @@ export default async function Home() {
 
     const pnl = isLive ? Number(strategy.paper_pnl ?? 0) : paperPnl
     const equity = isLive
-      ? Number(strategy.paper_cash ?? base) + Number(strategy.paper_pnl ?? 0)
+      ? base + Number(strategy.paper_pnl ?? 0)
       : base + paperPnl
 
     return { ...strategy, pnl, notional, tradeCount, equity, base }
@@ -200,14 +215,23 @@ export default async function Home() {
 
   const leaderboardMeta = (s: StrategyStats) => {
     const agentName = s.agent_id ? agentNameMap[s.agent_id] ?? 'Unknown' : 'Unassigned'
-    const sTrades = trades.filter((t) => t.strategy_id === s.id)
-    const notional = sTrades.reduce((acc, t) => acc + (Number(t.notional) || 0), 0)
     const isLive = s.trading_mode === 'live'
-    const cash = isLive
-      ? Number(s.paper_cash ?? s.base ?? 1000)
-      : Math.max((s.base ?? 1000) - notional + (s.pnl ?? 0), 0)
+    const modeSwitchedAt = s.mode_switched_at ? new Date(s.mode_switched_at).getTime() : 0
+    // Only count trades that belong to the current mode epoch
+    const sTrades = trades.filter((t) => {
+      if (t.strategy_id !== s.id) return false
+      if (modeSwitchedAt && t.executed_at) {
+        return new Date(t.executed_at).getTime() >= modeSwitchedAt
+      }
+      return true
+    })
+    const notional = sTrades.reduce((acc, t) => acc + (Number(t.notional) || 0), 0)
+    const base = s.base ?? Number(s.paper_capital ?? 1000)
+    const cash = Math.max(0, isLive
+      ? base + (s.pnl ?? 0) - notional
+      : base - notional + (s.pnl ?? 0))
     const positions = new Set(sTrades.map((t) => t.market)).size
-    const tradeCount = isLive ? sTrades.filter((t) => t.trading_mode === 'live').length : sTrades.length
+    const tradeCount = sTrades.length
     return { agentName, cash, positions, tradeCount }
   }
 
@@ -264,128 +288,57 @@ export default async function Home() {
   const copyTraderLastSignal = copyTraderSignals[0] ?? null
 
 
-  const copyTraderWatchlist: CopyTraderWallet[] = [
+  // Build watchlist dynamically from Fin wallet recommendations + seed wallets
+  const seedWallets: CopyTraderWallet[] = [
     {
       address: '0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee',
-      label: 'Pilot wallet A',
+      label: 'Seed wallet A',
       winRate: 60,
       copyScore: 7,
       tier: 'yellow',
       lastTrade: null,
       sourceUrl: 'https://polymarketscan.com/wallet/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee',
-      notes: 'Initial pilot wallet (manual seed)',
+      notes: 'Permanent seed wallet',
     },
     {
       address: '0x63ce342161250d705dc0b16df89036c8e5f9ba9a',
-      label: 'Pilot wallet B',
+      label: 'Seed wallet B',
       winRate: 60,
       copyScore: 7,
       tier: 'yellow',
       lastTrade: null,
       sourceUrl: 'https://polymarketscan.com/wallet/0x63ce342161250d705dc0b16df89036c8e5f9ba9a',
-      notes: 'Initial pilot wallet (manual seed)',
-    },
-    {
-      address: '0xdfe3fedc5c7679be42c3d393e99d4b55247b73c4',
-      label: 'cqs',
-      winRate: 67.77,
-      copyScore: 10,
-      tier: 'green',
-      lastTrade: '2026-02-19',
-      sourceUrl: 'https://polyvisionx.com/wallet/0xdfe3fedc5c7679be42c3d393e99d4b55247b73c4',
-      notes: 'Leaderboard #1',
-    },
-    {
-      address: '0xd1ecfa3e7d221851663f739626dcd15fca565d8e',
-      label: 'Scott8153',
-      winRate: 84.51,
-      copyScore: 10,
-      tier: 'green',
-      lastTrade: '2026-02-03',
-      sourceUrl: 'https://polyvisionx.com/wallet/0xd1ecfa3e7d221851663f739626dcd15fca565d8e',
-      notes: 'High win rate politics focus',
-    },
-    {
-      address: '0x5739ddf8672627ce076eff5f444610a250075f1a',
-      label: 'hopedieslast',
-      winRate: 69.51,
-      copyScore: 10,
-      tier: 'green',
-      lastTrade: '2026-02-20',
-      sourceUrl: 'https://polyvisionx.com/wallet/0x5739ddf8672627ce076eff5f444610a250075f1a',
-      notes: 'Balanced exposure',
-    },
-    {
-      address: '0x7f3c8979d0afa00007bae4747d5347122af05613',
-      label: 'LucasMeow',
-      winRate: 95.16,
-      copyScore: 10,
-      tier: 'green',
-      lastTrade: '2026-02-09',
-      sourceUrl: 'https://polyvisionx.com/wallet/0x7f3c8979d0afa00007bae4747d5347122af05613',
-      notes: 'Crypto-heavy specialist',
-    },
-    {
-      address: '0x4dfd481c16d9995b809780fd8a9808e8689f6e4a',
-      label: 'Magamyman',
-      winRate: 66.67,
-      copyScore: 10,
-      tier: 'green',
-      lastTrade: '2026-02-18',
-      sourceUrl: 'https://polyvisionx.com/wallet/0x4dfd481c16d9995b809780fd8a9808e8689f6e4a',
-      notes: 'Diversified exposure',
-    },
-    {
-      address: '0xe52c0a1327a12edc7bd54ea6f37ce00a4ca96924',
-      label: 'aff3',
-      winRate: 78.03,
-      copyScore: 10,
-      tier: 'green',
-      lastTrade: '2026-02-16',
-      sourceUrl: 'https://polyvisionx.com/wallet/0xe52c0a1327a12edc7bd54ea6f37ce00a4ca96924',
-      notes: 'Steady risk profile',
-    },
-    {
-      address: '0x0b219cf3d297991b58361dbebdbaa91e56b8deb6',
-      label: 'TerreMoto',
-      winRate: 83.7,
-      copyScore: 10,
-      tier: 'green',
-      lastTrade: '2026-02-19',
-      sourceUrl: 'https://polyvisionx.com/wallet/0x0b219cf3d297991b58361dbebdbaa91e56b8deb6',
-      notes: 'High confidence signals',
-    },
-    {
-      address: '0x85d575c99b977e9e39543747c859c83b727aaece',
-      label: 'warlasfutpro',
-      winRate: 79.57,
-      copyScore: 10,
-      tier: 'green',
-      lastTrade: '2026-02-19',
-      sourceUrl: 'https://polyvisionx.com/wallet/0x85d575c99b977e9e39543747c859c83b727aaece',
-      notes: 'Politics heavy mix',
-    },
-    {
-      address: '0xf5fe759cece500f58a431ef8dacea321f6e3e23d',
-      label: 'Stavenson',
-      winRate: 89.16,
-      copyScore: 10,
-      tier: 'green',
-      lastTrade: '2026-02-19',
-      sourceUrl: 'https://polyvisionx.com/wallet/0xf5fe759cece500f58a431ef8dacea321f6e3e23d',
-      notes: 'Ultra-consistent',
-    },
-    {
-      address: '0x9c667a1d1c1337c6dca9d93241d386e4ed346b66',
-      label: 'InfiniteCrypt0',
-      winRate: 71.15,
-      copyScore: 10,
-      tier: 'green',
-      lastTrade: '2026-02-19',
-      sourceUrl: 'https://polyvisionx.com/wallet/0x9c667a1d1c1337c6dca9d93241d386e4ed346b66',
-      notes: 'Fast trading cadence',
+      notes: 'Permanent seed wallet',
     },
   ]
+
+  const finWallets: CopyTraderWallet[] = finWalletRecs
+    .filter((r) => r.payload?.address)
+    .map((r) => {
+      const p = r.payload
+      const addr = (p.address ?? '').toLowerCase()
+      const winRate = p.win_rate ?? 0
+      const copyScore = p.copy_score ?? 0
+      const tier = winRate >= 80 ? 'green' : winRate >= 60 ? 'yellow' : 'red'
+      const topCat = p.categories
+        ? Object.entries(p.categories).sort((a, b) => b[1] - a[1])[0]?.[0] ?? ''
+        : ''
+      return {
+        address: addr,
+        label: p.username || 'Unknown',
+        winRate,
+        copyScore,
+        tier,
+        lastTrade: null,
+        sourceUrl: `https://polyvisionx.com/wallet/${addr}`,
+        notes: `Fin-recommended${topCat ? ` (${topCat} focus)` : ''}`,
+      }
+    })
+
+  // Deduplicate: Fin wallets override seeds if same address
+  const seedAddresses = new Set(seedWallets.map((w) => w.address.toLowerCase()))
+  const uniqueFinWallets = finWallets.filter((w) => !seedAddresses.has(w.address.toLowerCase()))
+  const copyTraderWatchlist: CopyTraderWallet[] = [...seedWallets, ...uniqueFinWallets]
 
   const indicator = (trade: Trade) =>
     trade.is_resolved ? <span title="Resolved">{'✅'}</span> : <span title="Unresolved">{'❌'}</span>

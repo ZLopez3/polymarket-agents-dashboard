@@ -71,7 +71,7 @@ function OrderDetailsBlock({ details }: { details: Record<string, unknown> }) {
 export default function TradeLogPanel({ strategyId, limit = 50 }: Props) {
   const [logs, setLogs] = useState<TradeLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const fetchLogs = useCallback(async () => {
