@@ -28,9 +28,15 @@ export async function createPolyClient(): Promise<ClobClient> {
 
   const signer = new Wallet(privateKey);
 
-  // Derive (or create) L2 API credentials from the private key
+  // Derive L2 API credentials from the private key (uses existing keys, does not create new ones)
   const tempClient = new ClobClient(HOST, CHAIN_ID, signer);
-  const creds = await tempClient.createOrDeriveApiKey();
+  let creds;
+  try {
+    creds = await tempClient.deriveApiKey();
+  } catch {
+    // Fall back to creating new keys if none exist yet
+    creds = await tempClient.createApiKey();
+  }
 
   // Initialize the fully-authenticated trading client
   const client = new ClobClient(HOST, CHAIN_ID, signer, creds);
@@ -74,16 +80,24 @@ export async function placeOrder(params: PlaceOrderParams) {
   const client = await createPolyClient();
 
   // Build the signed order using the SDK (handles EIP-712 signing internally)
-  const order = await client.createOrder({
-    tokenID: tokenId,
-    price,
-    size,
-    side: side === "BUY" ? Side.BUY : Side.SELL,
-    feeRateBps: 0,
-    nonce: 0,
-    expiration: 0,
-    taker: "0x0000000000000000000000000000000000000000",
-  });
+  // tickSize and negRisk are passed as CreateOrderOptions (second arg)
+  const validTickSizes = ["0.1", "0.01", "0.001", "0.0001"] as const;
+  type TickSize = (typeof validTickSizes)[number];
+  const resolvedTickSize: TickSize = validTickSizes.includes(tickSize as TickSize)
+    ? (tickSize as TickSize)
+    : "0.01";
+
+  const order = await client.createOrder(
+    {
+      tokenID: tokenId,
+      price,
+      size,
+      side: side === "BUY" ? Side.BUY : Side.SELL,
+      feeRateBps: 0,
+      nonce: 0,
+    },
+    { tickSize: resolvedTickSize, negRisk },
+  );
 
   // Map to SDK OrderType enum
   const orderTypeMap: Record<string, OrderType> = {
@@ -138,6 +152,14 @@ export async function resolveTokenIds(slug: string): Promise<{
     }
 
     if (tokenIds.length < 2) return null;
+
+    // Validate that the orderbook actually exists on the CLOB before returning
+    try {
+      const bookRes = await fetch(`https://clob.polymarket.com/book?token_id=${encodeURIComponent(tokenIds[0])}`);
+      if (!bookRes.ok) return null; // orderbook doesn't exist
+    } catch {
+      // If we can't verify, still return the tokens and let the order attempt handle the error
+    }
 
     return {
       yesTokenId: tokenIds[0],
