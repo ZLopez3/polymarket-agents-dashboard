@@ -236,8 +236,8 @@ export default async function Home() {
   }
 
   const totalPositions = new Set(trades.map((trade) => trade.market)).size
-  const recentTrades = trades.slice(0, 25)
-  const recentEvents = events.slice(0, 25)
+  const recentTrades = trades.slice(0, 30)
+  const recentEvents = events.slice(0, 30)
 
   const finAgent = agents.find((agent) => agent.name === 'Fin') ?? null
   const finHeartbeat = finAgent ? latestHeartbeatMap[finAgent.id] : undefined
@@ -694,70 +694,69 @@ export default async function Home() {
       <section id="events">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">Recent Events</h1>
-          {events.length > 25 && (
-            <Link href="/events" className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
-              View all {events.length}+ events &rarr;
-            </Link>
-          )}
+          <Link href="/events" className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
+            View all events &rarr;
+          </Link>
         </div>
-        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-800">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-900">
-              <tr>
-                <th className="px-4 py-2 text-left">Agent</th>
-                <th className="px-4 py-2 text-left">Type</th>
-                <th className="px-4 py-2 text-left">Severity</th>
-                <th className="px-4 py-2 text-left">Message</th>
-                <th className="px-4 py-2 text-left">Timestamp</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentEvents.map((event) => (
-                <tr key={event.id} className="border-t border-slate-800">
-                  <td className="px-4 py-2">{(event.agent_id && agentNameMap[event.agent_id]) || event.agent_id || 'System'}</td>
-                  <td className="px-4 py-2">{event.event_type}</td>
-                  <td className="px-4 py-2">{event.severity}</td>
-                  <td className="px-4 py-2 max-w-[400px] truncate" title={event.message ?? undefined}>{event.message}</td>
-                  <td className="px-4 py-2">{formatTs(event.created_at)}</td>
-                </tr>
-              ))}
-              {recentEvents.length === 0 && (
+        <div className="mt-4 rounded-lg border border-slate-800 overflow-hidden">
+          <div className="max-h-[324px] overflow-y-auto overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-900 sticky top-0 z-10">
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={5}>
-                    No events recorded yet.
-                  </td>
+                  <th className="px-4 py-2 text-left">Agent</th>
+                  <th className="px-4 py-2 text-left">Type</th>
+                  <th className="px-4 py-2 text-left">Severity</th>
+                  <th className="px-4 py-2 text-left">Message</th>
+                  <th className="px-4 py-2 text-left">Timestamp</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {recentEvents.map((event) => (
+                  <tr key={event.id} className="border-t border-slate-800">
+                    <td className="px-4 py-2">{(event.agent_id && agentNameMap[event.agent_id]) || event.agent_id || 'System'}</td>
+                    <td className="px-4 py-2">{event.event_type}</td>
+                    <td className="px-4 py-2">{event.severity}</td>
+                    <td className="px-4 py-2 max-w-[400px] truncate" title={event.message ?? undefined}>{event.message}</td>
+                    <td className="px-4 py-2">{formatTs(event.created_at)}</td>
+                  </tr>
+                ))}
+                {recentEvents.length === 0 && (
+                  <tr>
+                    <td className="px-4 py-4 text-slate-400" colSpan={5}>
+                      No events recorded yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
       <section>
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">Recent Trades</h1>
-          {trades.length > 25 && (
-            <Link href="/trades" className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
-              View all {trades.length}+ trades &rarr;
-            </Link>
-          )}
+          <Link href="/trades" className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
+            View all trades &rarr;
+          </Link>
         </div>
-        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-800">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-900">
-              <tr>
-                <th className="px-4 py-2 text-left">Strategy</th>
-                <th className="px-4 py-2 text-left">Market</th>
-                <th className="px-4 py-2 text-left">Side</th>
-                <th className="px-4 py-2 text-left">Mode</th>
-                <th className="px-4 py-2 text-left">Status</th>
-                <th className="px-4 py-2 text-left">Notional</th>
-                <th className="px-4 py-2 text-left">Resolves</th>
-                <th className="px-4 py-2 text-left">Resolved</th>
-                <th className="px-4 py-2 text-left">Timestamp</th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="mt-4 rounded-lg border border-slate-800 overflow-hidden">
+          <div className="max-h-[324px] overflow-y-auto overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-900 sticky top-0 z-10">
+                <tr>
+                  <th className="px-4 py-2 text-left">Strategy</th>
+                  <th className="px-4 py-2 text-left">Market</th>
+                  <th className="px-4 py-2 text-left">Side</th>
+                  <th className="px-4 py-2 text-left">Mode</th>
+                  <th className="px-4 py-2 text-left">Status</th>
+                  <th className="px-4 py-2 text-left">Notional</th>
+                  <th className="px-4 py-2 text-left">Resolves</th>
+                  <th className="px-4 py-2 text-left">Resolved</th>
+                  <th className="px-4 py-2 text-left">Timestamp</th>
+                </tr>
+              </thead>
+              <tbody>
               {recentTrades.map((trade) => (
                 <tr key={trade.id} className={`border-t border-slate-800 ${trade.status === 'failed' ? 'bg-red-950/20' : ''}`}>
                   <td className="px-4 py-2">{strategyMap[trade.strategy_id]?.name || trade.strategy_id}</td>
@@ -800,7 +799,8 @@ export default async function Home() {
                 </tr>
               )}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       </section>
     </main>
