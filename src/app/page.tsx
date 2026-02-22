@@ -648,7 +648,7 @@ export default async function Home() {
                     <h4 className="text-base font-semibold">Latest Whale Signals</h4>
                     <span className="text-xs text-slate-500">{copyTraderRecentSignals.length ? 'Live feed' : 'Waiting'}</span>
                   </div>
-                  <div className="mt-3 space-y-3 max-h-[280px] overflow-y-auto pr-1">
+                  <div className="mt-3 space-y-3 max-h-[228px] overflow-y-auto pr-1">
                     {copyTraderRecentSignals.map((signal) => (
                       <div key={signal.id} className="rounded-lg border border-slate-800/70 bg-slate-900/70 p-3">
                         <p className="text-sm text-slate-100">{signal.message ?? 'Copy-trade signal'}</p>
@@ -664,7 +664,7 @@ export default async function Home() {
                     <span className="text-xs text-slate-500">{copyTraderTrades.length} total</span>
                   </div>
                   {copyTraderTrades.length > 0 ? (
-                    <div className="mt-3">
+                    <div className="mt-3 max-h-[228px] overflow-y-auto pr-1">
                       <CopyTraderTradesTable trades={copyTraderTrades} />
                     </div>
                   ) : (
