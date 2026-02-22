@@ -18,9 +18,7 @@ export async function GET() {
 
     // Step 2: Fetch a sample market to verify full auth
     const client = await createPolyClient();
-    const markets = await client.getMarkets({
-      next_cursor: "MA==",
-    });
+    const markets = await client.getMarkets("MA==");
 
     const sampleMarket = markets.data?.[0] ?? null;
 
