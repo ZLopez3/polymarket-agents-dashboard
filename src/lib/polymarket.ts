@@ -139,6 +139,11 @@ export async function resolveTokenIds(slug: string): Promise<{
     if (!res.ok) return null;
     const data = await res.json();
 
+    // Skip resolved, closed, or archived markets early
+    if (data.closed === true || data.active === false || data.archived === true || data.resolved === true) {
+      return null;
+    }
+
     // clobTokenIds is a JSON string like '["yesTokenId","noTokenId"]'
     let tokenIds: string[] = [];
     if (typeof data.clobTokenIds === "string") {
