@@ -243,7 +243,38 @@ export async function GET(request: Request) {
       }
 
       if (candidates.length) {
-        const pick = candidates[Math.floor(Math.random() * Math.min(3, candidates.length))]
+        const isLive = (bondRow.trading_mode ?? 'paper') === 'live'
+
+        // In live mode, iterate candidates until one resolves a valid tokenId
+        let pick = candidates[0]
+        let bondTokenId: string | null = null
+        let bondTickSize = '0.01'
+        let bondNegRisk = false
+
+        for (const c of candidates.slice(0, 5)) {
+          if (c.slug) {
+            const tokens = await resolveTokenIds(c.slug)
+            if (tokens) {
+              pick = c
+              const side = c.yes_price >= c.no_price ? 'YES' : 'NO'
+              bondTokenId = side === 'YES' ? tokens.yesTokenId : tokens.noTokenId
+              bondTickSize = tokens.tickSize
+              bondNegRisk = tokens.negRisk
+              break
+            } else if (isLive) {
+              console.log(`[signals] BondLadder: skipping "${c.title}" - no tradeable tokenId on CLOB`)
+              continue
+            }
+          }
+          // In paper mode, first candidate is fine without a tokenId
+          if (!isLive) { pick = c; break }
+        }
+
+        // If live and still no tokenId after trying candidates, skip entirely
+        if (isLive && !bondTokenId) {
+          results.push(`BondLadder: no tradeable candidates (${candidates.length} tried, none resolved on CLOB)`)
+        } else {
+
         const side = pick.yes_price >= pick.no_price ? 'YES' : 'NO'
         const price = side === 'YES' ? pick.yes_price : pick.no_price
         const baseSize = ORDER_AMOUNT_USD * sizeMult
@@ -251,19 +282,6 @@ export async function GET(request: Request) {
         const size = Number((baseSize * jitter).toFixed(2))
         const pnl = Number((size * (1.0 - price)).toFixed(2))
         const finBoosted = finHotMarkets.has(pick.title)
-
-        // Resolve CLOB token IDs from Gamma API using slug
-        let bondTokenId: string | null = null
-        let bondTickSize = '0.01'
-        let bondNegRisk = false
-        if (pick.slug) {
-          const tokens = await resolveTokenIds(pick.slug)
-          if (tokens) {
-            bondTokenId = side === 'YES' ? tokens.yesTokenId : tokens.noTokenId
-            bondTickSize = tokens.tickSize
-            bondNegRisk = tokens.negRisk
-          }
-        }
 
         await executeTrade(
           bondRow,
@@ -280,6 +298,8 @@ export async function GET(request: Request) {
           severity: 'info',
           message: `Signal: ${pick.title} @ ${price} (${side}) [${bondRow.trading_mode ?? 'paper'}]${finBoosted ? ' [Fin-recommended]' : ''}`,
         })
+
+        } // end tokenId else
       } else {
         results.push('BondLadder: no candidates')
       }
@@ -309,7 +329,37 @@ export async function GET(request: Request) {
         }
       )
       if (candidates.length) {
-        const pick = candidates[Math.floor(Math.random() * candidates.length)]
+        const isAiLive = (aiRow.trading_mode ?? 'paper') === 'live'
+
+        // In live mode, iterate candidates until one resolves a valid tokenId
+        let pick = candidates[0]
+        let tokenId: string | null = null
+        let tickSize = '0.01'
+        let negRisk = false
+
+        for (const c of candidates.slice(0, 5)) {
+          const marketSlug = c.slug
+          if (marketSlug) {
+            const tokens = await resolveTokenIds(marketSlug)
+            if (tokens) {
+              pick = c
+              const cSide = c.divergenceDirection === 'bullish' ? 'YES' : 'NO'
+              tokenId = cSide === 'YES' ? tokens.yesTokenId : tokens.noTokenId
+              tickSize = tokens.tickSize
+              negRisk = tokens.negRisk
+              break
+            } else if (isAiLive) {
+              console.log(`[signals] Contrarian: skipping "${c.title}" - no tradeable tokenId on CLOB`)
+              continue
+            }
+          }
+          if (!isAiLive) { pick = c; break }
+        }
+
+        if (isAiLive && !tokenId) {
+          results.push(`Contrarian: no tradeable candidates (${candidates.length} tried, none resolved on CLOB)`)
+        } else {
+
         const side = pick.divergenceDirection === 'bullish' ? 'YES' : 'NO'
         const yesPrice = pick.polymarketPrice
         const noPrice = 1 - yesPrice
@@ -326,25 +376,11 @@ export async function GET(request: Request) {
         const marketSlug = pick.slug
         const eventSlug = pick.polymarketEventSlug
         let details: Record<string, unknown> | null = null
-        // Try market slug first for agent API details, fall back to event slug
         for (const s of [marketSlug, eventSlug].filter(Boolean)) {
           try {
             const d = await fetchJson(`${POLY_AGENT_API_BASE}?action=market&slug=${encodeURIComponent(s)}`)
             if (d.data) { details = d.data; break }
           } catch { /* try next */ }
-        }
-
-        // Resolve CLOB token IDs from Gamma API using market-level slug only
-        let tokenId: string | null = null
-        let tickSize = '0.01'
-        let negRisk = false
-        if (marketSlug) {
-          const tokens = await resolveTokenIds(marketSlug)
-          if (tokens) {
-            tokenId = side === 'YES' ? tokens.yesTokenId : tokens.noTokenId
-            tickSize = tokens.tickSize
-            negRisk = tokens.negRisk
-          }
         }
 
         // Apply resolution window filter
@@ -371,6 +407,7 @@ export async function GET(request: Request) {
         })
 
         } // end withinResolutionWindow else
+        } // end tokenId else
       } else {
         results.push('Contrarian: no candidates')
       }
