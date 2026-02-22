@@ -230,10 +230,6 @@ export default async function Home() {
   const copyTraderRecentSignals = copyTraderSignals.slice(0, 5)
   const copyTraderLastSignal = copyTraderSignals[0] ?? null
 
-  console.log("[v0] copyTraderAgent:", copyTraderAgent?.name ?? "NOT FOUND", copyTraderAgent?.id ?? "")
-  console.log("[v0] copyTraderStrategy:", copyTraderStrategy?.name ?? "NOT FOUND", copyTraderStrategy?.id ?? "")
-  console.log("[v0] copyTraderTrades count:", copyTraderTrades.length)
-  console.log("[v0] copyTraderSignals count:", copyTraderSignals.length, "(dedicated:", copySignals.length, "/ cotAgentEvents:", cotAgentEvents.length, ")")
 
   const copyTraderWatchlist: CopyTraderWallet[] = [
     {
