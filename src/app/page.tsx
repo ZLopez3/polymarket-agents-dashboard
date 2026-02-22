@@ -368,12 +368,8 @@ export default async function Home() {
     },
   ]
 
-  const indicator = (trade: Trade) => (
-    <span
-      className={`inline-block h-3 w-3 rounded-full ${resolutionColor(trade, now)}`}
-      title={resolutionTitle(trade, now)}
-    />
-  )
+  const indicator = (trade: Trade) =>
+    trade.is_resolved ? <span title="Resolved">{'✅'}</span> : <span title="Unresolved">{'❌'}</span>
 
   return (
     <main className="min-h-screen bg-slate-950 text-white p-8 space-y-8">
