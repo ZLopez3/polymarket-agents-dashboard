@@ -18,6 +18,7 @@ export interface Strategy {
   paper_pnl?: number | null
   paper_positions?: number | null
   mode_switched_at?: string | null
+  mirror_wallets?: string[] | null
 }
 
 export interface StrategySettings {

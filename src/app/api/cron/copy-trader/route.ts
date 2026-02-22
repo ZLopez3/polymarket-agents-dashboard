@@ -56,49 +56,203 @@ function sizeFromTier(tier: string) {
   return 10
 }
 
+interface StrategyRow {
+  id: string
+  name: string
+  trading_mode: string | null
+  max_position_size: number | null
+  max_orders_per_minute: number | null
+  daily_loss_limit: number | null
+  mirror_wallets: string[] | null
+}
+
+// Execute a single trade against a specific strategy
+async function executeTrade(
+  strategyRow: StrategyRow,
+  w: Record<string, unknown>,
+  wallet: string,
+  side: 'YES' | 'NO',
+  notional: number,
+) {
+  const mode = strategyRow.trading_mode ?? 'paper'
+  let liveError: string | null = null
+
+  if (mode === 'live') {
+    const safeguard = await checkSafeguards({
+      supabase,
+      strategyId: strategyRow.id,
+      notional,
+      maxPositionSize: strategyRow.max_position_size ?? 500,
+      maxOrdersPerMinute: strategyRow.max_orders_per_minute ?? 5,
+      dailyLossLimit: strategyRow.daily_loss_limit ?? -200,
+    })
+
+    if (!safeguard.passed) {
+      await logTradeEvent(supabase, {
+        strategyId: strategyRow.id,
+        event: 'safety_block',
+        mode: 'live',
+        marketId: w.market_id as string,
+        orderDetails: { market: w.market_title, side, notional, wallet: wallet.slice(0, 10) },
+        result: safeguard.reason,
+      })
+      return `BLOCKED[${strategyRow.name}]: ${w.market_title} - ${safeguard.reason}`
+    }
+
+    let tokenId: string | null = null
+    let tickSize = '0.01'
+    let negRisk = false
+    const slug = (w.market_slug || w.slug) as string | undefined
+    if (slug) {
+      const tokens = await resolveTokenIds(slug)
+      if (tokens) {
+        tokenId = side === 'YES' ? tokens.yesTokenId : tokens.noTokenId
+        tickSize = tokens.tickSize
+        negRisk = tokens.negRisk
+      }
+    }
+
+    if (tokenId) {
+      try {
+        await logTradeEvent(supabase, {
+          strategyId: strategyRow.id,
+          event: 'live_request',
+          mode: 'live',
+          marketId: w.market_id as string,
+          orderDetails: { tokenId, side, size: notional, wallet: wallet.slice(0, 10) },
+        })
+        const orderResult = await placeOrder({
+          tokenId,
+          price: (w.price as number) ?? 0.5,
+          size: notional,
+          side: side === 'YES' ? 'BUY' : 'SELL',
+          tickSize,
+          negRisk,
+        })
+        await logTradeEvent(supabase, {
+          strategyId: strategyRow.id,
+          event: 'live_response',
+          mode: 'live',
+          marketId: w.market_id as string,
+          orderDetails: orderResult as unknown as Record<string, unknown>,
+          result: 'success',
+        })
+      } catch (err) {
+        liveError = (err as Error).message
+        await logTradeEvent(supabase, {
+          strategyId: strategyRow.id,
+          event: 'live_response',
+          mode: 'live',
+          marketId: w.market_id as string,
+          error: liveError,
+          result: 'failed',
+        })
+      }
+    } else {
+      liveError = 'No tokenId for live execution'
+      await logTradeEvent(supabase, {
+        strategyId: strategyRow.id,
+        event: 'safety_block',
+        mode: 'live',
+        marketId: w.market_id as string,
+        result: liveError,
+      })
+    }
+  }
+
+  const tradeStatus = mode === 'live' && liveError ? 'failed' : 'filled'
+  await supabase.from('trades').insert({
+    strategy_id: strategyRow.id,
+    market: w.market_title,
+    side,
+    notional,
+    pnl: 0,
+    market_id: w.market_id || null,
+    market_slug: w.market_slug || null,
+    closes_at: w.closes_at || null,
+    is_resolved: (w.is_resolved as boolean) ?? false,
+    status: tradeStatus,
+    error: liveError || null,
+    trading_mode: mode,
+  })
+
+  await logTradeEvent(supabase, {
+    strategyId: strategyRow.id,
+    event: mode === 'live' ? 'live_exec' : 'paper_exec',
+    mode,
+    marketId: w.market_id as string,
+    orderDetails: { market: w.market_title, side, notional, wallet: wallet.slice(0, 10), status: tradeStatus },
+    result: tradeStatus === 'failed' ? `failed: ${liveError}` : 'recorded',
+  })
+
+  return `${mode.toUpperCase()}[${strategyRow.name}]: ${w.market_title} ${side}`
+}
+
 export async function GET(request: Request) {
   if (!verifyCronSecret(request)) return unauthorizedResponse()
 
-  // Find copy trader strategy with trading mode info
-  const { data: strategies } = await supabase
+  // Fetch ALL copy-trader strategies: the global one + per-wallet mirrors
+  const { data: allStrategies } = await supabase
     .from('strategies')
-    .select('id,name,trading_mode,max_position_size,max_orders_per_minute,daily_loss_limit')
-    .ilike('name', '%Copy Trader%')
-    .limit(1)
-  const strategyRow = strategies?.[0]
-  if (!strategyRow) {
-    return NextResponse.json({ ok: false, error: 'Copy Trader strategy not found' }, { status: 404 })
+    .select('id,name,trading_mode,max_position_size,max_orders_per_minute,daily_loss_limit,mirror_wallets')
+    .or('name.ilike.%Copy Trader%,name.ilike.%Whale Mirror%')
+
+  const strategyRows = (allStrategies || []) as StrategyRow[]
+  if (strategyRows.length === 0) {
+    return NextResponse.json({ ok: false, error: 'No copy-trader strategies found' }, { status: 404 })
   }
 
-  const mode = strategyRow.trading_mode ?? 'paper'
+  // Separate: global strategy (no mirror_wallets) vs per-wallet strategies
+  const globalStrategy = strategyRows.find((s) => !s.mirror_wallets || s.mirror_wallets.length === 0)
+  const mirrorStrategies = strategyRows.filter((s) => s.mirror_wallets && s.mirror_wallets.length > 0)
 
-  // Fetch strategy settings for resolution window filter
+  // Build wallet->strategies lookup for per-wallet mirrors
+  const walletToStrategies = new Map<string, StrategyRow[]>()
+  for (const ms of mirrorStrategies) {
+    for (const w of ms.mirror_wallets!) {
+      const addr = w.toLowerCase()
+      const existing = walletToStrategies.get(addr) || []
+      existing.push(ms)
+      walletToStrategies.set(addr, existing)
+    }
+  }
+
+  // Use the global strategy for settings/resolution filter
+  const primaryStrategy = globalStrategy || strategyRows[0]
+
   const { data: settingsRows } = await supabase
     .from('strategy_settings')
     .select('max_resolution_days')
-    .eq('strategy_id', strategyRow.id)
+    .eq('strategy_id', primaryStrategy.id)
     .limit(1)
   const maxResDays = settingsRows?.[0]?.max_resolution_days ?? 0
   const maxResolutionMs = maxResDays > 0 ? maxResDays * 24 * 60 * 60 * 1000 : 0
 
-  // Get recent trade hashes to deduplicate
-  const { data: recentTrades } = await supabase
-    .from('trades')
-    .select('market,side')
-    .eq('strategy_id', strategyRow.id)
-    .order('executed_at', { ascending: false })
-    .limit(100)
-  const recentSet = new Set((recentTrades || []).map((t) => `${t.market}-${t.side}`))
+  // Get recent trade hashes per strategy to deduplicate
+  const dedupeByStrategy = new Map<string, Set<string>>()
+  for (const s of strategyRows) {
+    const { data: recentTrades } = await supabase
+      .from('trades')
+      .select('market,side')
+      .eq('strategy_id', s.id)
+      .order('executed_at', { ascending: false })
+      .limit(100)
+    dedupeByStrategy.set(s.id, new Set((recentTrades || []).map((t) => `${t.market}-${t.side}`)))
+  }
 
   const results: string[] = []
 
   try {
     const WATCH_WALLETS = await buildWatchlist()
+    // Also add all per-wallet mirror addresses to the watch set
+    for (const addr of walletToStrategies.keys()) {
+      WATCH_WALLETS.add(addr)
+    }
 
     const feed = await fetchJson(`${BASE}?action=whales&limit=200`)
     const rows = feed.data || []
 
-    console.log(`[copy-trader] Fetched ${rows.length} whale rows, watching ${WATCH_WALLETS.size} wallets`)
+    console.log(`[copy-trader] Fetched ${rows.length} whale rows, watching ${WATCH_WALLETS.size} wallets, ${strategyRows.length} strategies`)
 
     let matchedWallet = 0
     let passedResolution = 0
@@ -110,146 +264,58 @@ export async function GET(request: Request) {
 
       if (maxResolutionMs > 0) {
         if (!w.closes_at) continue
-        const closesAt = new Date(w.closes_at)
+        const closesAt = new Date(w.closes_at as string)
         if (Number.isNaN(closesAt.getTime())) continue
         if (closesAt.getTime() - Date.now() > maxResolutionMs) continue
       }
       passedResolution++
 
-      const side = (w.outcome || '').toLowerCase().includes('no') ? 'NO' : 'YES'
+      const side: 'YES' | 'NO' = (w.outcome || '').toLowerCase().includes('no') ? 'NO' : 'YES'
+      const notional = sizeFromTier(w.tier as string)
       const dedupeKey = `${w.market_title}-${side}`
-      if (recentSet.has(dedupeKey)) continue
-      recentSet.add(dedupeKey)
 
-      const notional = sizeFromTier(w.tier)
-      let liveError: string | null = null
+      // Determine which strategies this trade should route to
+      const targetStrategies: StrategyRow[] = []
 
-      if (mode === 'live') {
-        // Run safeguard checks
-        const safeguard = await checkSafeguards({
-          supabase,
-          strategyId: strategyRow.id,
-          notional,
-          maxPositionSize: strategyRow.max_position_size ?? 500,
-          maxOrdersPerMinute: strategyRow.max_orders_per_minute ?? 5,
-          dailyLossLimit: strategyRow.daily_loss_limit ?? -200,
-        })
-
-        if (!safeguard.passed) {
-          await logTradeEvent(supabase, {
-            strategyId: strategyRow.id,
-            event: 'safety_block',
-            mode: 'live',
-            marketId: w.market_id,
-            orderDetails: { market: w.market_title, side, notional, wallet: wallet.slice(0, 10) },
-            result: safeguard.reason,
-          })
-          results.push(`BLOCKED: ${w.market_title} - ${safeguard.reason}`)
-          continue
-        }
-
-        // Resolve CLOB token IDs from Gamma API using slug
-        let tokenId: string | null = null
-        let tickSize = '0.01'
-        let negRisk = false
-        if (w.market_slug || w.slug) {
-          const tokens = await resolveTokenIds(w.market_slug || w.slug)
-          if (tokens) {
-            tokenId = side === 'YES' ? tokens.yesTokenId : tokens.noTokenId
-            tickSize = tokens.tickSize
-            negRisk = tokens.negRisk
-          }
-        }
-
-        if (tokenId) {
-          try {
-            await logTradeEvent(supabase, {
-              strategyId: strategyRow.id,
-              event: 'live_request',
-              mode: 'live',
-              marketId: w.market_id,
-              orderDetails: { tokenId, side, size: notional, wallet: wallet.slice(0, 10) },
-            })
-
-            const orderResult = await placeOrder({
-              tokenId,
-              price: w.price ?? 0.5,
-              size: notional,
-              side: side === 'YES' ? 'BUY' : 'SELL',
-              tickSize,
-              negRisk,
-            })
-
-            await logTradeEvent(supabase, {
-              strategyId: strategyRow.id,
-              event: 'live_response',
-              mode: 'live',
-              marketId: w.market_id,
-              orderDetails: orderResult as unknown as Record<string, unknown>,
-              result: 'success',
-            })
-          } catch (err) {
-            liveError = (err as Error).message
-            await logTradeEvent(supabase, {
-              strategyId: strategyRow.id,
-              event: 'live_response',
-              mode: 'live',
-              marketId: w.market_id,
-              error: liveError,
-              result: 'failed',
-            })
-          }
-        } else {
-          liveError = 'No tokenId for live execution'
-          await logTradeEvent(supabase, {
-            strategyId: strategyRow.id,
-            event: 'safety_block',
-            mode: 'live',
-            marketId: w.market_id,
-            result: liveError,
-          })
+      // Per-wallet mirror strategies for this specific wallet
+      const perWalletStrategies = walletToStrategies.get(wallet) || []
+      for (const ms of perWalletStrategies) {
+        const dedupeSet = dedupeByStrategy.get(ms.id)!
+        if (!dedupeSet.has(dedupeKey)) {
+          targetStrategies.push(ms)
+          dedupeSet.add(dedupeKey)
         }
       }
 
-      // Always insert trade record -- with status and error for failed live trades
-      const tradeStatus = mode === 'live' && liveError ? 'failed' : 'filled'
-      await supabase.from('trades').insert({
-        strategy_id: strategyRow.id,
-        market: w.market_title,
-        side,
-        notional,
-        pnl: tradeStatus === 'failed' ? 0 : 0,
-        market_id: w.market_id || null,
-        market_slug: w.market_slug || null,
-        closes_at: w.closes_at || null,
-        is_resolved: w.is_resolved ?? false,
-        status: tradeStatus,
-        error: liveError || null,
-        trading_mode: mode,
-      })
+      // Global strategy (watches all wallets in the watchlist)
+      if (globalStrategy) {
+        const dedupeSet = dedupeByStrategy.get(globalStrategy.id)!
+        if (!dedupeSet.has(dedupeKey)) {
+          targetStrategies.push(globalStrategy)
+          dedupeSet.add(dedupeKey)
+        }
+      }
 
-      await logTradeEvent(supabase, {
-        strategyId: strategyRow.id,
-        event: mode === 'live' ? 'live_exec' : 'paper_exec',
-        mode,
-        marketId: w.market_id,
-        orderDetails: { market: w.market_title, side, notional, wallet: wallet.slice(0, 10), status: tradeStatus },
-        result: tradeStatus === 'failed' ? `failed: ${liveError}` : 'recorded',
-      })
+      // Execute trade for each target strategy
+      for (const target of targetStrategies) {
+        const result = await executeTrade(target, w, wallet, side, notional)
+        results.push(result)
+      }
 
-      await supabase.from('events').insert({
-        agent_id: null,
-        event_type: 'copy_trade_signal',
-        severity: 'info',
-        message: `Copy-trade: ${wallet.slice(0, 6)}... ${side} ${w.market_title} @ ${w.price} (tier: ${w.tier}) [${mode}]`,
-      })
-
-      results.push(`${mode.toUpperCase()}: ${w.market_title} ${side}`)
+      // Log whale signal event once (not per-strategy)
+      if (targetStrategies.length > 0) {
+        await supabase.from('events').insert({
+          agent_id: null,
+          event_type: 'copy_trade_signal',
+          severity: 'info',
+          message: `Copy-trade: ${wallet.slice(0, 6)}... ${side} ${w.market_title} @ ${w.price} (tier: ${w.tier}) [${targetStrategies.map((s) => s.name).join(', ')}]`,
+        })
+      }
     }
 
     console.log(`[copy-trader] Summary: ${rows.length} fetched, ${matchedWallet} wallet-matched, ${passedResolution} passed-resolution, ${results.length} traded`)
 
-    return NextResponse.json({ ok: true, mode, trades: results.length, results, diagnostics: { fetched: rows.length, matchedWallet, passedResolution } })
+    return NextResponse.json({ ok: true, strategies: strategyRows.length, trades: results.length, results, diagnostics: { fetched: rows.length, matchedWallet, passedResolution } })
   } catch (err) {
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 })
   }
