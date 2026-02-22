@@ -3,8 +3,8 @@ import { supabase, verifyCronSecret, unauthorizedResponse, fetchJson } from '../
 import { checkSafeguards, logTradeEvent } from '../_lib/safeguards'
 import { placeOrder, resolveTokenIds } from '@/lib/polymarket'
 
-// Run from London to avoid Polymarket US geoblock on live orders
-export const preferredRegion = 'lhr1'
+// Run from Tokyo to avoid Polymarket geoblock (US, UK, EU all blocked)
+export const preferredRegion = 'hnd1'
 
 const BASE = 'https://gzydspfquuaudqeztorw.supabase.co/functions/v1/agent-api'
 
