@@ -30,7 +30,7 @@ export async function createPolyClient(): Promise<ClobClient> {
 
   // Derive (or create) L2 API credentials from the private key
   const tempClient = new ClobClient(HOST, CHAIN_ID, signer);
-  const creds = await tempClient.createOrDeriveApiCreds();
+  const creds = await tempClient.createOrDeriveApiKey();
 
   // Initialize the fully-authenticated trading client
   const client = new ClobClient(HOST, CHAIN_ID, signer, creds);
@@ -107,12 +107,21 @@ export async function getMarket(conditionId: string) {
 }
 
 /**
- * Checks if the API connection and credentials are valid.
+ * Checks basic API connectivity (unauthenticated ping).
  */
 export async function testConnection() {
-  const client = await createPolyClient();
-  const ok = await client.getOk();
+  const tempClient = new ClobClient(HOST, CHAIN_ID);
+  const ok = await tempClient.getOk();
   return { ok, host: HOST, chainId: CHAIN_ID };
+}
+
+/**
+ * Derives API keys and verifies full authenticated access.
+ */
+export async function testAuth() {
+  const client = await createPolyClient();
+  const keys = await client.getApiKeys();
+  return { authenticated: true, keyCount: keys?.length ?? 0 };
 }
 
 export { Side, OrderType };
