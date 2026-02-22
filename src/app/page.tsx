@@ -365,6 +365,12 @@ export default async function Home() {
 
   const copyTraderWatchlist: CopyTraderWallet[] = [...watchlistPermanent, ...extraFinWallets]
 
+  // Build set of wallet addresses that already have dedicated mirror strategies
+  const mirroredAddresses: string[] = strategies
+    .filter((s) => s.mirror_wallets && s.mirror_wallets.length > 0)
+    .flatMap((s) => s.mirror_wallets!)
+    .map((a) => a.toLowerCase())
+
   const indicator = (trade: Trade) =>
     trade.is_resolved ? <span title="Resolved">{'✅'}</span> : <span title="Unresolved">{'❌'}</span>
 
@@ -680,7 +686,7 @@ export default async function Home() {
                 <Link href="#copy-trader-trades" className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:text-white transition">
                   Jump to trades
                 </Link>
-                <CopyTraderWatchlist wallets={copyTraderWatchlist} />
+                <CopyTraderWatchlist wallets={copyTraderWatchlist} mirroredAddresses={mirroredAddresses} />
               </div>
             </div>
           )}
