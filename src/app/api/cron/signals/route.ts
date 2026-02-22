@@ -24,6 +24,16 @@ export async function GET(request: Request) {
 
   const results: string[] = []
 
+  // Helper: check if a market's resolution date is within the configured window
+  function withinResolutionWindow(closesAt: string | null | undefined, maxDays: number): boolean {
+    if (!maxDays || maxDays <= 0) return true // 0 = no filter
+    if (!closesAt) return false // no resolution date = skip when filter is active
+    const closesMs = new Date(closesAt).getTime()
+    if (Number.isNaN(closesMs)) return false
+    const maxMs = Date.now() + maxDays * 24 * 60 * 60 * 1000
+    return closesMs <= maxMs
+  }
+
   // Helper: execute a trade (paper or live)
   async function executeTrade(
     strategyRow: { id: string; name: string; trading_mode: string | null; max_position_size: number | null; max_orders_per_minute: number | null; daily_loss_limit: number | null },
@@ -150,11 +160,13 @@ export async function GET(request: Request) {
       const s = settingsMap[bondRow.id] || {}
       const certainty = s.certainty_threshold ?? 0.95
       const liquidityFloor = (s.liquidity_floor ?? 0.5) * 1_000_000
+      const maxResDays = s.max_resolution_days ?? 0
       const candidates = (markets.data || []).filter(
         (m: Record<string, unknown>) =>
           ((m.yes_price as number) >= certainty || (m.no_price as number) >= certainty) &&
           !m.is_resolved &&
-          ((m.liquidity_usd as number) ?? 0) >= liquidityFloor
+          ((m.liquidity_usd as number) ?? 0) >= liquidityFloor &&
+          withinResolutionWindow(m.closes_at as string | null, maxResDays)
       )
       if (candidates.length) {
         const pick = candidates[Math.floor(Math.random() * candidates.length)]
@@ -218,6 +230,13 @@ export async function GET(request: Request) {
           } catch { /* ignore */ }
         }
 
+        // Apply resolution window filter
+        const aiMaxResDays = s.max_resolution_days ?? 0
+        const closesAt = (details?.closes_at as string) || null
+        if (!withinResolutionWindow(closesAt, aiMaxResDays)) {
+          results.push(`Contrarian: skipped ${pick.title} - resolves outside ${aiMaxResDays}d window`)
+        } else {
+
         await executeTrade(
           aiRow,
           { market: pick.title, side, notional: size, pnl, market_id: (details?.market_id as string) || null, market_slug: slug || null, closes_at: (details?.closes_at as string) || null, is_resolved: (details?.is_resolved as boolean) ?? false },
@@ -231,6 +250,8 @@ export async function GET(request: Request) {
           severity: 'info',
           message: `Signal: ${pick.title} (AI ${pick.aiConsensus?.toFixed?.(2) ?? pick.aiConsensus} vs market ${pick.polymarketPrice}) [${aiRow.trading_mode ?? 'paper'}]`,
         })
+
+        } // end withinResolutionWindow else
       } else {
         results.push('Contrarian: no candidates')
       }
