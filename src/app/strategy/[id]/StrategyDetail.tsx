@@ -21,7 +21,7 @@ const ranges: RangeOption[] = [
 ]
 
 const formatMoney = (value: number) => `$${value.toFixed(2)}`
-const formatDate = (ts?: string | null) => (ts ? new Date(ts).toLocaleString() : '--')
+const formatDate = (ts?: string | null) => (ts ? new Date(ts).toLocaleString() : '—')
 
 const computeEquity = (trades: Trade[], base: number) => {
   let equity = base
@@ -70,12 +70,12 @@ const buildHistogram = (trades: Trade[], width: number, height: number) => {
 
 const resolutionColor = (trade: Trade, nowTs: number) => {
   if (trade.is_resolved) {
-    return trade.side === 'YES' ? 'bg-positive' : 'bg-negative'
+    return trade.side === 'YES' ? 'bg-emerald-500' : 'bg-rose-500'
   }
   if (trade.closes_at && new Date(trade.closes_at).getTime() < nowTs) {
-    return 'bg-warning'
+    return 'bg-amber-500'
   }
-  return 'bg-border-accent'
+  return 'bg-slate-500'
 }
 
 const resolutionTitle = (trade: Trade, nowTs: number) => {
@@ -119,144 +119,114 @@ export default function StrategyDetail({ strategy, trades }: Props) {
 
   const minEquity = equityPoints.length ? Math.min(...equityPoints.map((point) => point.equity)) : base
   const maxEquity = equityPoints.length ? Math.max(...equityPoints.map((point) => point.equity)) : base
-  const startTs = equityPoints.length ? new Date(equityPoints[0].t).toLocaleString() : '--'
-  const endTs = equityPoints.length ? new Date(equityPoints[equityPoints.length - 1].t).toLocaleString() : '--'
-
-  const selectClasses =
-    'rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-accent focus:ring-1 focus:ring-accent/30'
+  const startTs = equityPoints.length ? new Date(equityPoints[0].t).toLocaleString() : '—'
+  const endTs = equityPoints.length ? new Date(equityPoints[equityPoints.length - 1].t).toLocaleString() : '—'
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto max-w-7xl px-6 py-8 space-y-8">
-        {/* Back link */}
-        <Link href="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
-          Back to dashboard
+    <main className="min-h-screen bg-slate-950 text-white p-8 space-y-8">
+      <div className="mb-4">
+        <Link href="/" className="text-slate-300 hover:text-white">
+          ← Back
         </Link>
-
-        {/* Header */}
-        <header>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">{strategy.name}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Owner: {strategy.owner || 'System'}</p>
-        </header>
-
-        {/* Range selector */}
-        <div className="flex flex-wrap gap-2">
-          {ranges.map((rangeOption) => (
-            <button
-              key={rangeOption.label}
-              className={`rounded-lg px-3.5 py-1.5 text-sm font-medium transition ${
-                range.label === rangeOption.label
-                  ? 'bg-accent/15 text-accent border border-accent/30'
-                  : 'border border-border text-muted-foreground hover:border-border-accent hover:text-foreground'
-              }`}
-              onClick={() => setRange(rangeOption)}
-              type="button"
-            >
-              {rangeOption.label}
-            </button>
-          ))}
-        </div>
-
-        {/* KPI Cards */}
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            { label: 'Total PnL', value: formatMoney(totalPnl), color: totalPnl >= 0 ? 'text-positive' : 'text-negative' },
-            { label: 'Equity', value: formatMoney(equityPoints.length ? equityPoints[equityPoints.length - 1].equity : base) },
-            { label: 'Base Capital', value: formatMoney(base) },
-            { label: 'Trades', value: String(filtered.length) },
-          ].map((kpi) => (
-            <div key={kpi.label} className="rounded-xl border border-border bg-card p-5">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{kpi.label}</p>
-              <p className={`mt-2 text-2xl font-semibold font-mono tracking-tight ${kpi.color || 'text-foreground'}`}>{kpi.value}</p>
-            </div>
-          ))}
-        </section>
-
-        {/* Equity Curve */}
-        <section className="rounded-xl border border-border bg-card p-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold text-foreground">Equity Curve</h2>
-            <span className={`font-mono text-sm ${totalPnl >= 0 ? 'text-positive' : 'text-negative'}`}>{totalPnl >= 0 ? '+' : ''}{formatMoney(totalPnl)}</span>
-          </div>
-          <div className="mt-4">
-            <svg width="100%" viewBox="0 0 800 260" aria-label="Equity curve chart">
-              <line x1="40" y1="10" x2="40" y2="220" stroke="var(--border)" strokeWidth="1" />
-              <line x1="40" y1="220" x2="780" y2="220" stroke="var(--border)" strokeWidth="1" />
-              <text x="10" y="20" fontSize="10" fill="var(--muted-foreground)" className="font-mono">{formatMoney(maxEquity)}</text>
-              <text x="10" y="220" fontSize="10" fill="var(--muted-foreground)" className="font-mono">{formatMoney(minEquity)}</text>
-              <text x="40" y="250" fontSize="9" fill="var(--muted-foreground)" className="font-mono">{startTs}</text>
-              <text x="560" y="250" fontSize="9" fill="var(--muted-foreground)" className="font-mono">{endTs}</text>
-              <g transform="translate(40,10)">
-                <path d={path} fill="none" stroke="var(--accent)" strokeWidth="2" />
-                <path d={`${path} L 740 210 L 0 210 Z`} fill="var(--accent)" opacity="0.08" />
-              </g>
-            </svg>
-          </div>
-        </section>
-
-        {/* PnL Histogram */}
-        <section className="rounded-xl border border-border bg-card p-6">
-          <h2 className="text-base font-semibold text-foreground">Trade PnL Histogram</h2>
-          <div className="mt-4">
-            <svg width="100%" viewBox="0 0 800 160" aria-label="Trade PnL histogram">
-              <rect x="0" y="80" width="800" height="1" fill="var(--border)" />
-              {bars.map((bar, index) => (
-                <rect key={index} x={bar.x} y={bar.y} width={bar.width} height={bar.height} rx="1" fill={bar.positive ? 'var(--positive)' : 'var(--negative)'} opacity="0.75" />
-              ))}
-            </svg>
-          </div>
-        </section>
-
-        {/* Trades Table */}
-        <section>
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold text-foreground">Trades</h2>
-            <select className={selectClasses} value={sort} onChange={(event) => setSort(event.target.value as 'recent' | 'best' | 'worst')}>
-              <option value="recent">Most Recent</option>
-              <option value="best">Best PnL</option>
-              <option value="worst">Worst PnL</option>
-            </select>
-          </div>
-          <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-card">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Market</th>
-                  <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Side</th>
-                  <th className="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Notional</th>
-                  <th className="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">PnL</th>
-                  <th className="px-5 py-3 text-center text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Status</th>
-                  <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Executed</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map((trade) => (
-                  <tr key={trade.id} className="table-row-hover border-b border-border/50 last:border-0 transition">
-                    <td className="max-w-[200px] truncate px-5 py-3 text-foreground">{trade.market}</td>
-                    <td className="px-5 py-3">
-                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
-                        trade.side === 'YES' ? 'bg-positive/10 text-positive' : 'bg-negative/10 text-negative'
-                      }`}>{trade.side}</span>
-                    </td>
-                    <td className="px-5 py-3 text-right font-mono text-foreground">{formatMoney(Number(trade.notional || 0))}</td>
-                    <td className={`px-5 py-3 text-right font-mono ${Number(trade.pnl || 0) >= 0 ? 'text-positive' : 'text-negative'}`}>{formatMoney(Number(trade.pnl || 0))}</td>
-                    <td className="px-5 py-3 text-center">
-                      <span className={`inline-block h-2.5 w-2.5 rounded-full ${resolutionColor(trade, now)}`} title={resolutionTitle(trade, now)} />
-                    </td>
-                    <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{formatDate(trade.executed_at)}</td>
-                  </tr>
-                ))}
-                {sorted.length === 0 && (
-                  <tr>
-                    <td className="px-5 py-8 text-center text-muted-foreground" colSpan={6}>No trades in this range.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
       </div>
+      <header className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-semibold">{strategy.name}</h1>
+          <p className="text-slate-400">Owner: {strategy.owner}</p>
+        </div>
+      </header>
+
+      <section className="flex gap-3 flex-wrap">
+        {ranges.map((rangeOption) => (
+          <button
+            key={rangeOption.label}
+            className={`rounded-full px-3 py-1 text-sm border ${range.label === rangeOption.label ? 'border-blue-500 text-white' : 'border-slate-800 text-slate-400'}`}
+            onClick={() => setRange(rangeOption)}
+            type="button"
+          >
+            {rangeOption.label}
+          </button>
+        ))}
+      </section>
+
+      <section className="rounded-lg border border-slate-800 bg-slate-900 p-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Equity Curve</h2>
+          <div className="text-slate-400 text-sm">PnL: {formatMoney(totalPnl)}</div>
+        </div>
+        <div className="mt-4">
+          <svg width="100%" viewBox="0 0 800 260" className="text-emerald-400">
+            <line x1="40" y1="10" x2="40" y2="220" stroke="#334155" strokeWidth="1" />
+            <line x1="40" y1="220" x2="780" y2="220" stroke="#334155" strokeWidth="1" />
+            <text x="10" y="20" fontSize="10" fill="#94A3B8">{formatMoney(maxEquity)}</text>
+            <text x="10" y="220" fontSize="10" fill="#94A3B8">{formatMoney(minEquity)}</text>
+            <text x="40" y="250" fontSize="10" fill="#94A3B8">{startTs}</text>
+            <text x="560" y="250" fontSize="10" fill="#94A3B8">{endTs}</text>
+            <g transform="translate(40,10)">
+              <path d={path} fill="none" stroke="currentColor" strokeWidth="2" />
+              <path d={`${path} L 740 210 L 0 210 Z`} fill="currentColor" opacity="0.1" />
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-slate-800 bg-slate-900 p-6">
+        <h2 className="text-xl font-semibold">Trade PnL Histogram</h2>
+        <div className="mt-4">
+          <svg width="100%" viewBox="0 0 800 160">
+            <rect x="0" y="80" width="800" height="1" fill="#334155" />
+            {bars.map((bar, index) => (
+              <rect key={index} x={bar.x} y={bar.y} width={bar.width} height={bar.height} fill={bar.positive ? '#22c55e' : '#ef4444'} opacity="0.8" />
+            ))}
+          </svg>
+        </div>
+      </section>
+
+      <section>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Trades</h2>
+          <select className="bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm" value={sort} onChange={(event) => setSort(event.target.value as 'recent' | 'best' | 'worst')}>
+            <option value="recent">Most Recent</option>
+            <option value="best">Best PnL</option>
+            <option value="worst">Worst PnL</option>
+          </select>
+        </div>
+        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-800">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-900">
+              <tr>
+                <th className="px-4 py-2 text-left">Market</th>
+                <th className="px-4 py-2 text-left">Side</th>
+                <th className="px-4 py-2 text-left">Notional</th>
+                <th className="px-4 py-2 text-left">PnL</th>
+                <th className="px-4 py-2 text-left">Resolved</th>
+                <th className="px-4 py-2 text-left">Exec Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((trade) => (
+                <tr key={trade.id} className="border-t border-slate-800">
+                  <td className="px-4 py-2">{trade.market}</td>
+                  <td className="px-4 py-2">{trade.side}</td>
+                  <td className="px-4 py-2">{formatMoney(Number(trade.notional || 0))}</td>
+                  <td className="px-4 py-2">{formatMoney(Number(trade.pnl || 0))}</td>
+                  <td className="px-4 py-2">
+                    <span className={`inline-block h-3 w-3 rounded-full ${resolutionColor(trade, now)}`} title={resolutionTitle(trade, now)} />
+                  </td>
+                  <td className="px-4 py-2">{formatDate(trade.executed_at)}</td>
+                </tr>
+              ))}
+              {sorted.length === 0 && (
+                <tr>
+                  <td className="px-4 py-4 text-slate-400" colSpan={6}>
+                    No trades in this range.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
   )
 }

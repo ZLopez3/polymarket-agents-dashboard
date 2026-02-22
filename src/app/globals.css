@@ -1,72 +1,26 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0b0e14;
-  --foreground: #e2e8f0;
-  --card: #111827;
-  --card-foreground: #e2e8f0;
-  --card-hover: #1a2332;
-  --muted: #1e293b;
-  --muted-foreground: #94a3b8;
-  --border: #1e293b;
-  --border-accent: #334155;
-  --accent: #10b981;
-  --accent-foreground: #d1fae5;
-  --accent-muted: rgba(16, 185, 129, 0.12);
-  --destructive: #f43f5e;
-  --destructive-foreground: #fecdd3;
-  --warning: #f59e0b;
-  --positive: #10b981;
-  --negative: #ef4444;
-  --radius: 0.75rem;
+  --background: #ffffff;
+  --foreground: #171717;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-card-hover: var(--card-hover);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-border: var(--border);
-  --color-border-accent: var(--border-accent);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent-muted: var(--accent-muted);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-warning: var(--warning);
-  --color-positive: var(--positive);
-  --color-negative: var(--negative);
-  --radius: var(--radius);
-  --font-sans: 'Inter', 'Inter Fallback';
-  --font-mono: 'JetBrains Mono', 'JetBrains Mono Fallback';
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans);
-}
-
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: var(--background);
-}
-::-webkit-scrollbar-thumb {
-  background: var(--border-accent);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--muted-foreground);
-}
-
-/* Table row hover */
-.table-row-hover:hover {
-  background: var(--card-hover);
+  font-family: Arial, Helvetica, sans-serif;
 }
