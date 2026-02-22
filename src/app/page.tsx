@@ -29,7 +29,7 @@ async function fetchSummary(): Promise<SummaryData> {
     supabase.from('trades').select('*').order('executed_at', { ascending: false }).limit(500),
     supabase.from('events').select('*').order('created_at', { ascending: false }).limit(50),
     supabase.from('agent_heartbeats').select('*').order('created_at', { ascending: false }).limit(50),
-    supabase.from('events').select('*').eq('event_type', 'copy_trade_signal').order('created_at', { ascending: false }).limit(20),
+    supabase.from('events').select('*').like('event_type', 'copy_trader%').order('created_at', { ascending: false }).limit(20),
   ])
 
   return {
@@ -188,18 +188,17 @@ export default async function Home() {
     : undefined
   const parsedFinInsight = parseFinInsight(finEvent?.message)
 
-  // Locate the CopyTrader agent with resilient name matching
-  const copyTraderAgent = agents.find((a) => {
-    const n = a.name.toLowerCase()
-    return n.includes('copy') && n.includes('trader') || n === 'copytrader'
-  }) ?? null
-
-  // Match strategy by name OR by agent_id fallback
+  // Locate the Copy Trader strategy first (name is reliable), then find the Cot agent via agent_id
   const copyTraderStrategy = strategyStats.find((s) => {
     const n = s.name.toLowerCase().replace(/[-_]/g, ' ')
-    if (n.includes('copy trader') || n.includes('copytrader')) return true
-    if (copyTraderAgent && s.agent_id === copyTraderAgent.id) return true
-    return false
+    return n.includes('copy trader') || n.includes('copytrader') || n.includes('whale mirror')
+  }) ?? null
+
+  // The copy-trader agent is named "Cot" in the DB -- match by agent_id from the strategy, or by name
+  const copyTraderAgent = agents.find((a) => {
+    if (copyTraderStrategy?.agent_id && a.id === copyTraderStrategy.agent_id) return true
+    const n = a.name.toLowerCase()
+    return n === 'cot' || (n.includes('copy') && n.includes('trader'))
   }) ?? null
 
   // Match trades by strategy_id OR by agent_id on the trades table
@@ -215,17 +214,21 @@ export default async function Home() {
   const copyTraderWins = copyTraderTrades.filter((trade) => Number(trade.pnl) > 0).length
   const copyTraderWinRate = copyTraderTrades.length ? (copyTraderWins / copyTraderTrades.length) * 100 : 0
 
-  // Use dedicated copy signal query instead of filtering from limited general events
-  const copyTraderSignals = copySignals.length > 0
-    ? copySignals
-    : events.filter((event) => (event.event_type ?? '').toLowerCase() === 'copy_trade_signal')
+  // Collect copy trader signals: dedicated query + events from the Cot agent + matching event_type fallback
+  const cotAgentEvents = copyTraderAgent
+    ? events.filter((e) => e.agent_id === copyTraderAgent.id)
+    : []
+  const copyTraderSignals = [
+    ...copySignals,
+    ...cotAgentEvents.filter((e) => !copySignals.some((cs) => cs.id === e.id)),
+  ]
   const copyTraderRecentSignals = copyTraderSignals.slice(0, 5)
   const copyTraderLastSignal = copyTraderSignals[0] ?? null
 
   console.log("[v0] copyTraderAgent:", copyTraderAgent?.name ?? "NOT FOUND", copyTraderAgent?.id ?? "")
   console.log("[v0] copyTraderStrategy:", copyTraderStrategy?.name ?? "NOT FOUND", copyTraderStrategy?.id ?? "")
   console.log("[v0] copyTraderTrades count:", copyTraderTrades.length)
-  console.log("[v0] copyTraderSignals count:", copyTraderSignals.length, "(dedicated:", copySignals.length, "/ fallback events:", events.filter((e) => (e.event_type ?? '').toLowerCase() === 'copy_trade_signal').length, ")")
+  console.log("[v0] copyTraderSignals count:", copyTraderSignals.length, "(dedicated:", copySignals.length, "/ cotAgentEvents:", cotAgentEvents.length, ")")
 
   const copyTraderWatchlist: CopyTraderWallet[] = [
     {
