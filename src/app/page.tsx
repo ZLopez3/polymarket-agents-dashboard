@@ -105,11 +105,13 @@ export default async function Home() {
   }, {})
 
   const avatarMap: Record<string, string> = {
-    'BondLadder-Agent': '/avatars/bond-ladder.svg',
-    'AIContrarian-Agent': '/avatars/ai-contrarian.png',
-    Audi: '/avatars/audi.svg',
-    Fin: '/avatars/fin.svg',
-    'CopyTrader-Agent': '/avatars/copy-trader.svg',
+    'BondLadder-Agent': '/avatars/bond-ladder.jpg',
+    'AIContrarian-Agent': '/avatars/ai-contrarian.jpg',
+    Audi: '/avatars/audi.jpg',
+    Fin: '/avatars/fin.jpg',
+    'Fin-Agent': '/avatars/fin.jpg',
+    'CopyTrader-Agent': '/avatars/copy-trader.jpg',
+    Cot: '/avatars/copy-trader.jpg',
   }
 
   const descriptionMap: Record<string, string> = {
@@ -435,13 +437,13 @@ export default async function Home() {
             }
             return (
               <div key={agent.id} className="rounded-2xl border border-slate-800 bg-slate-900 p-6 flex flex-col items-center text-center h-[550px]">
-                <div className="h-40 w-40 rounded-full bg-slate-800 p-2 mb-4 overflow-hidden">
+                <div className="h-40 w-40 mb-4">
                   <Image
-                    src={avatarMap[agent.name] || '/avatars/bond-ladder.svg'}
+                    src={avatarMap[agent.name] || '/avatars/bond-ladder.jpg'}
                     alt={agent.name}
                     width={160}
                     height={160}
-                    className="h-full w-full rounded-full object-cover"
+                    className="h-full w-full object-contain"
                     priority
                   />
                 </div>
