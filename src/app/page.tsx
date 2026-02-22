@@ -212,9 +212,9 @@ export default async function Home() {
     const notional = sTrades.reduce((acc, t) => acc + (Number(t.notional) || 0), 0)
     const isLive = s.trading_mode === 'live'
     const base = s.base ?? Number(s.paper_capital ?? 1000)
-    const cash = isLive
+    const cash = Math.max(0, isLive
       ? base + (s.pnl ?? 0) - notional
-      : Math.max(base - notional + (s.pnl ?? 0), 0)
+      : base - notional + (s.pnl ?? 0))
     const positions = new Set(sTrades.map((t) => t.market)).size
     const tradeCount = isLive ? sTrades.filter((t) => t.trading_mode === 'live').length : sTrades.length
     return { agentName, cash, positions, tradeCount }
