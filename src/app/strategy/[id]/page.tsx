@@ -14,9 +14,9 @@ export const dynamic = 'force-dynamic'
 export default async function StrategyPage({ params }: StrategyPageProps) {
   if (!supabaseAdmin) {
     return (
-      <main className="min-h-screen bg-slate-950 text-white p-8">
+      <main className="min-h-screen bg-background text-foreground p-8">
         <h1 className="text-2xl font-semibold">Strategy not available</h1>
-        <p className="text-slate-400 mt-2">Missing Supabase credentials (SUPABASE_SERVICE_ROLE_KEY / NEXT_PUBLIC_SUPABASE_URL).</p>
+        <p className="mt-2 text-muted-foreground">Missing Supabase credentials (SUPABASE_SERVICE_ROLE_KEY / NEXT_PUBLIC_SUPABASE_URL).</p>
       </main>
     )
   }
@@ -36,9 +36,9 @@ export default async function StrategyPage({ params }: StrategyPageProps) {
       notFound()
     }
     return (
-      <main className="min-h-screen bg-slate-950 text-white p-8">
+      <main className="min-h-screen bg-background text-foreground p-8">
         <h1 className="text-2xl font-semibold">Strategy not available</h1>
-        <p className="text-slate-400 mt-2">{strategyError?.message || 'Failed to load strategy data.'}</p>
+        <p className="mt-2 text-muted-foreground">{strategyError?.message || 'Failed to load strategy data.'}</p>
       </main>
     )
   }
